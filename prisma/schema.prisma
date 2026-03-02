@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A gym customer (tenant) on the platform.
+model Gym {
+  id               String             @id @default(cuid())
+  name             String
+  slug             String             @unique
+  status           GymStatus          @default(ACTIVE)
+  stripeCustomerId String?
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  customizations   GymCustomization?
+  locations        Location[]
+  users            User[]
+  members          Member[]
+  membershipPlans  MembershipPlan[]
+  products         Product[]
+  events           Event[]
+  instructors      Instructor[]
+  orders           Order[]
+}
+
+/// Per-gym branding and feature configuration.
+model GymCustomization {
+  id             String   @id @default(cuid())
+  gymId          String   @unique
+  gym            Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  logoUrl        String?
+  primaryColor   String?  // CSS color string
+  secondaryColor String?
+  customCss      String?
+
+  featureFlags   Json?    // e.g. { "webshop": true, "events": false }
+  customFields   Json?    // gym-specific extra fields schemas
+}
+
+/// Application user (login). Usually linked to an adult Member.
+model User {
+  id        String    @id @default(cuid())
+  gymId     String?
+  gym       Gym?      @relation(fields: [gymId], references: [id], onDelete: SetNull)
+
+  email     String    @unique
+  password  String?   // hashed password if using credentials
+  name      String?
+  role      UserRole  @default(MEMBER)
+
+  memberId  String?   @unique
+  member    Member?   @relation("MemberUser", fields: [memberId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+/// Physical gym location belonging to a Gym (tenant).
+model Location {
+  id         String    @id @default(cuid())
+  gymId      String
+  gym        Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  name       String
+  address    String?
+  timezone   String    @default("UTC")
+  settings   Json?
+
+  classes          Class[]
+  events           Event[]
+  products         Product[]
+  checkIns         CheckIn[]
+  orders           Order[]
+  membershipPlans  MembershipPlan[]
+}
+
+/// Individual member (adult or child) of a gym.
+model Member {
+  id               String             @id @default(cuid())
+  gymId            String
+  gym              Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  birthDate        DateTime?
+  emergencyContact String?
+  medicalNotes     String?
+  beltRank         String?
+  discipline       String?
+  status           MemberStatus       @default(ACTIVE)
+  memberType       MemberType         @default(ADULT)
+
+  customFields     Json?
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user             User?              @relation("MemberUser")
+  subscriptions    Subscription[]
+  checkIns         CheckIn[]
+  orders           Order[]
+  eventRegs        EventRegistration[]
+
+  // Parent/child relations
+  children         MemberRelation[]   @relation("AdultToChild")
+  parents          MemberRelation[]   @relation("ChildToAdult")
+
+  instructor       Instructor?        @relation("MemberInstructor")
+}
+
+/// Links an adult member to a child member (e.g. parent → child).
+model MemberRelation {
+  id              String         @id @default(cuid())
+
+  adultId         String
+  adult           Member         @relation("AdultToChild", fields: [adultId], references: [id], onDelete: Cascade)
+
+  childId         String
+  child           Member         @relation("ChildToAdult", fields: [childId], references: [id], onDelete: Cascade)
+
+  relationship    String         // e.g. "parent", "guardian"
+
+  createdAt       DateTime       @default(now())
+}
+
+/// Membership plan (e.g. Monthly Unlimited, 10-class pack).
+model MembershipPlan {
+  id                    String              @id @default(cuid())
+  gymId                 String
+  gym                   Gym                 @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  locationId            String?
+  location              Location?           @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  name                  String
+  description           String?
+  priceCents            Int
+  durationDays          Int                 // 0 = one-time / punch card
+  maxCheckInsPerMonth   Int?                // null = unlimited
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  subscriptions         Subscription[]
+  orderItems            OrderItem[]
+}
+
+/// A member's subscription to a membership plan.
+model Subscription {
+  id                   String               @id @default(cuid())
+  memberId             String
+  member               Member               @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  planId               String
+  plan                 MembershipPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  startsAt             DateTime
+  endsAt               DateTime
+  status               SubscriptionStatus   @default(ACTIVE)
+  autoRenew            Boolean              @default(false)
+  stripeSubscriptionId String?
+
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+}
+
+/// Recurring class entry (e.g. Mon/Wed BJJ 18:00).
+model Class {
+  id           String     @id @default(cuid())
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name         String
+  discipline   String?
+  dayOfWeek    Int        // 0-6
+  startTime    String     // "18:00" in local time
+  endTime      String
+  capacity     Int?
+
+  instructorId String?
+  instructor   Instructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  checkIns     CheckIn[]
+}
+
+/// Instructor profile, optionally linked to a Member.
+model Instructor {
+  id          String    @id @default(cuid())
+  gymId       String
+  gym         Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  memberId    String?   @unique
+  member      Member?   @relation("MemberInstructor", fields: [memberId], references: [id], onDelete: SetNull)
+
+  name        String
+  photoUrl    String?
+  bio         String?
+  disciplines String?
+
+  classes     Class[]
+}
+
+/// Check-in event for attendance tracking.
+model CheckIn {
+  id         String    @id @default(cuid())
+  memberId   String
+  member     Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  locationId String
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  classId    String?
+  class      Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  checkedAt  DateTime  @default(now())
+}
+
+/// Special events such as seminars or competitions.
+model Event {
+  id         String               @id @default(cuid())
+  gymId      String
+  gym        Gym                  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  locationId String
+  location   Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name       String
+  type       String               // seminar, workshop, competition
+  startAt    DateTime
+  endAt      DateTime
+  priceCents Int                  @default(0)
+  capacity   Int?
+
+  registrations EventRegistration[]
+  orderItems     OrderItem[]
+}
+
+/// A member's registration for an event.
+model EventRegistration {
+  id        String    @id @default(cuid())
+  memberId  String
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  status    String    @default("registered") // registered, cancelled, attended
+  paidAt    DateTime?
+
+  createdAt DateTime  @default(now())
+}
+
+/// A product sold in the webshop (merchandise, etc.).
+model Product {
+  id          String   @id @default(cuid())
+  gymId       String
+  gym         Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  name        String
+  sku         String?  @unique
+  priceCents  Int
+  stock       Int      @default(0)
+  imageUrl    String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems  OrderItem[]
+}
+
+/// An order in the webshop (for products, memberships, or events).
+model Order {
+  id                String      @id @default(cuid())
+  memberId          String?
+  member            Member?     @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  gymId             String
+  gym               Gym         @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  locationId        String?
+  location          Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  totalCents        Int
+  status            String      @default("pending") // pending, paid, cancelled, refunded
+  stripePaymentIntentId String?
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  items             OrderItem[]
+}
+
+/// An item within an Order.
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  planId      String?
+  plan        MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  eventId     String?
+  event       Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  quantity    Int      @default(1)
+  priceCents  Int
+}
+
+enum GymStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  GYM_ADMIN
+  LOCATION_ADMIN
+  STAFF
+  INSTRUCTOR
+  MEMBER
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MemberType {
+  ADULT
+  CHILD
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PAUSED
+}
