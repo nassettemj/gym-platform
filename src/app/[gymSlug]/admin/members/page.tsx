@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { GymMemberFormToggle } from "@/components/GymMemberFormToggle";
 import { MembersTable } from "@/components/MembersTable";
 
@@ -29,10 +28,11 @@ async function createMember(formData: FormData) {
     | "CHILD";
   const parentIdRaw = String(formData.get("parentId") ?? "").trim();
   const parentId = parentIdRaw || null;
+  const isInstructor = formData.get("isInstructor") === "on";
 
   if (!gymId || !firstName || !lastName) return;
 
-  const child = await prisma.member.create({
+  const member = await prisma.member.create({
     data: {
       gymId,
       firstName,
@@ -47,13 +47,23 @@ async function createMember(formData: FormData) {
     await prisma.memberRelation.create({
       data: {
         adultId: parentId,
-        childId: child.id,
+        childId: member.id,
         relationship: "parent",
       },
     });
   }
 
-  revalidatePath(`/${gymSlug}/admin/members`);
+  if (isInstructor) {
+    await prisma.instructor.create({
+      data: {
+        gymId,
+        memberId: member.id,
+        name: `${member.firstName} ${member.lastName}`,
+      },
+    });
+  }
+
+  redirect(`/${gymSlug}/admin/members`);
 }
 
 export default async function MembersPage({ params }: MembersPageProps) {

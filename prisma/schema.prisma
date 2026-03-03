@@ -189,6 +189,13 @@ model Class {
   instructorId String?
   instructor   Instructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
 
+  /// Concrete instance timing for calendar and history.
+  startAt      DateTime?
+  endAt        DateTime?
+
+  mainCategory ClassMainCategory?
+  subCategory  ClassSubCategory?
+
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -353,4 +360,18 @@ enum SubscriptionStatus {
   EXPIRED
   CANCELLED
   PAUSED
+}
+
+enum ClassMainCategory {
+  OPEN_MAT
+  GI
+  NO_GI
+}
+
+enum ClassSubCategory {
+  STAND_UP
+  FUNDAMENTALS
+  INTERMEDIATE
+  ADVANCED
+  COMPETITION
 }

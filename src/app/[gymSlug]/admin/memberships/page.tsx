@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { MembershipPlanForm } from "@/components/MembershipPlanForm";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
 
@@ -67,7 +66,7 @@ async function createPlan(formData: FormData) {
     },
   });
 
-  revalidatePath(`/${gymSlug}/admin/memberships`);
+  redirect(`/${gymSlug}/admin/memberships`);
 }
 
 async function updatePlan(formData: FormData) {
@@ -103,7 +102,7 @@ async function updatePlan(formData: FormData) {
     },
   });
 
-  revalidatePath(`/${gymSlug}/admin/memberships`);
+  redirect(`/${gymSlug}/admin/memberships`);
 }
 
 async function deletePlan(formData: FormData) {
@@ -124,7 +123,7 @@ async function deletePlan(formData: FormData) {
     where: { id: planId },
   });
 
-  revalidatePath(`/${gymSlug}/admin/memberships`);
+  redirect(`/${gymSlug}/admin/memberships`);
 }
 
 export default async function MembershipsPage({ params }: MembershipsPageProps) {

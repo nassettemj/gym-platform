@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
 
 interface LocationsPageProps {
   params: Promise<{
@@ -38,7 +37,7 @@ async function createLocation(formData: FormData) {
     },
   });
 
-  revalidatePath(`/${gymSlug}/admin/locations`);
+  redirect(`/${gymSlug}/admin/locations`);
 }
 
 export default async function LocationsPage({ params }: LocationsPageProps) {

@@ -21,7 +21,7 @@ export function GymMemberForm({ gymId, gymSlug, adults, action }: Props) {
   return (
     <form
       action={action}
-      className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end"
+      className="grid grid-cols-1 md:grid-cols-8 gap-3 items-end"
     >
       <input type="hidden" name="gymId" value={gymId} />
       <input type="hidden" name="gymSlug" value={gymSlug} />
@@ -118,6 +118,18 @@ export function GymMemberForm({ gymId, gymSlug, adults, action }: Props) {
       {!showParent && (
         <div className="hidden md:block" aria-hidden="true" />
       )}
+
+      <div className="flex items-center gap-2">
+        <input
+          id="isInstructor"
+          name="isInstructor"
+          type="checkbox"
+          className="h-4 w-4 rounded border border-white/40 bg-black/40"
+        />
+        <label htmlFor="isInstructor" className="text-xs font-medium">
+          Is instructor
+        </label>
+      </div>
 
       <button
         type="submit"
