@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { GymMemberForm } from "@/components/GymMemberForm";
+import { GymMemberFormToggle } from "@/components/GymMemberFormToggle";
+import { MembersTable } from "@/components/MembersTable";
 
 interface MembersPageProps {
   params: Promise<{
@@ -66,7 +67,7 @@ export default async function MembersPage({ params }: MembersPageProps) {
     where: { slug: gymSlug },
     include: {
       members: {
-        orderBy: { lastName: "asc" },
+        orderBy: { createdAt: "asc" },
       },
     },
   });
@@ -87,48 +88,35 @@ export default async function MembersPage({ params }: MembersPageProps) {
       name: `${m.firstName} ${m.lastName}`,
     }));
 
+  const memberRows = gym.members.map((m) => ({
+    id: m.id,
+    firstName: m.firstName,
+    lastName: m.lastName,
+    email: m.email,
+    phone: m.phone,
+    memberType: m.memberType as "ADULT" | "CHILD",
+    createdAt: m.createdAt.toISOString(),
+  }));
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{gym.name} · Members</h1>
 
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
-        <p className="text-xs text-white/70">
-          Total members: <span className="font-semibold">{memberCount}</span>
-        </p>
-
-        <h2 className="text-sm font-medium text-white/80">Add member</h2>
-        <GymMemberForm
-          gymId={gym.id}
-          gymSlug={gymSlug}
-          adults={adultsForSelect}
-          action={createMember}
-        />
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-white/70">
+            Total members: <span className="font-semibold">{memberCount}</span>
+          </p>
+          <GymMemberFormToggle
+            gymId={gym.id}
+            gymSlug={gymSlug}
+            adults={adultsForSelect}
+            action={createMember}
+          />
+        </div>
 
         <div className="pt-2 border-t border-white/10">
-          <h3 className="text-xs font-medium text-white/70 mb-2">
-            Existing members
-          </h3>
-          {gym.members.length === 0 ? (
-            <p className="text-sm text-white/60">No members yet.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {gym.members.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between"
-                >
-                  <span>
-                    {m.firstName} {m.lastName}
-                  </span>
-                  <span className="text-xs text-white/60">
-                    {m.memberType}
-                    {m.email ? ` · ${m.email}` : ""}
-                    {m.phone ? ` · ${m.phone}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <MembersTable members={memberRows} />
         </div>
       </section>
     </div>
