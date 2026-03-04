@@ -1,0 +1,17 @@
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"authorize start","data":{"email":"test@mail.com"},"timestamp":1772656020981,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"after findUnique","data":{"userFound":true,"hasPassword":true},"timestamp":1772656021576,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"after bcrypt","data":{"valid":false},"timestamp":1772656021642,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"authorize start","data":{"email":"test@mail.com"},"timestamp":1772656034238,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"after findUnique","data":{"userFound":true,"hasPassword":true},"timestamp":1772656034372,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:authorize","message":"after bcrypt","data":{"valid":true},"timestamp":1772656034437,"hypothesisId":"H2"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":true},"timestamp":1772656034438,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":false},"timestamp":1772656035701,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:session","message":"session callback","data":{},"timestamp":1772656035706,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":false},"timestamp":1772656075699,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:session","message":"session callback","data":{},"timestamp":1772656075705,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":false},"timestamp":1772656075936,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:session","message":"session callback","data":{},"timestamp":1772656075938,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":false},"timestamp":1772656076053,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:session","message":"session callback","data":{},"timestamp":1772656076056,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:jwt","message":"jwt callback","data":{"hasUser":false},"timestamp":1772656080194,"hypothesisId":"H3"}
+{"sessionId":"8055e2","location":"auth.ts:session","message":"session callback","data":{},"timestamp":1772656080196,"hypothesisId":"H3"}

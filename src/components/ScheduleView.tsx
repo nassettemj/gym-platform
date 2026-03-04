@@ -21,6 +21,8 @@ type ClassItem = {
   instructorName: string;
   mainCategory: string | null;
   subCategory: string | null;
+  minAgeYears: number | null;
+  maxAgeYears: number | null;
 };
 
 type Props = {
@@ -530,6 +532,32 @@ export function ScheduleView({
               name="capacity"
               type="number"
               min={1}
+              className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="minAgeYears" className="text-xs font-medium">
+              Min age (optional)
+            </label>
+            <input
+              id="minAgeYears"
+              name="minAgeYears"
+              type="number"
+              min={0}
+              className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="maxAgeYears" className="text-xs font-medium">
+              Max age (optional)
+            </label>
+            <input
+              id="maxAgeYears"
+              name="maxAgeYears"
+              type="number"
+              min={0}
               className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
             />
           </div>
@@ -1115,6 +1143,41 @@ export function ScheduleView({
                     type="number"
                     name="capacity"
                     min={1}
+                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-white/80 text-[11px]">
+                    Min age
+                  </label>
+                  <input
+                    type="number"
+                    name="minAgeYears"
+                    min={0}
+                    defaultValue={
+                      selectedClass.minAgeYears != null
+                        ? selectedClass.minAgeYears
+                        : ""
+                    }
+                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-white/80 text-[11px]">
+                    Max age
+                  </label>
+                  <input
+                    type="number"
+                    name="maxAgeYears"
+                    min={0}
+                    defaultValue={
+                      selectedClass.maxAgeYears != null
+                        ? selectedClass.maxAgeYears
+                        : ""
+                    }
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
                   />
                 </div>

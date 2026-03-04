@@ -32,6 +32,10 @@ async function createClass(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? "60");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
+  const minAgeRaw = String(formData.get("minAgeYears") ?? "").trim();
+  const maxAgeRaw = String(formData.get("maxAgeYears") ?? "").trim();
+  const minAgeYears = minAgeRaw ? Number(minAgeRaw) : null;
+  const maxAgeYears = maxAgeRaw ? Number(maxAgeRaw) : null;
   const isRecurring =
     String(formData.get("isRecurring") ?? "").toLowerCase() === "on";
   const repeatDaysRaw = formData.getAll("repeatDays") as string[];
@@ -67,7 +71,13 @@ async function createClass(formData: FormData) {
     endAt: Date;
     mainCategory: any;
     subCategory: any;
+    minAgeYears: number | null;
+    maxAgeYears: number | null;
   }[] = [];
+
+  if (minAgeYears != null && maxAgeYears != null && minAgeYears > maxAgeYears) {
+    return;
+  }
 
   // Base occurrence from the primary date/time/duration
   occurrences.push({
@@ -82,6 +92,8 @@ async function createClass(formData: FormData) {
     endAt,
     mainCategory: mainCategory ? (mainCategory as any) : null,
     subCategory: subCategory ? (subCategory as any) : null,
+    minAgeYears,
+    maxAgeYears,
   });
 
   if (
@@ -153,6 +165,8 @@ async function createClass(formData: FormData) {
           endAt: candidateEnd,
           mainCategory: mainCategory ? (mainCategory as any) : null,
           subCategory: subCategory ? (subCategory as any) : null,
+          minAgeYears,
+          maxAgeYears,
         });
       }
 
@@ -197,6 +211,10 @@ async function updateClass(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? "60");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
+  const minAgeRaw = String(formData.get("minAgeYears") ?? "").trim();
+  const maxAgeRaw = String(formData.get("maxAgeYears") ?? "").trim();
+  const minAgeYears = minAgeRaw ? Number(minAgeRaw) : null;
+  const maxAgeYears = maxAgeRaw ? Number(maxAgeRaw) : null;
   const viewModeRaw = String(formData.get("viewMode") ?? "week");
   const viewMode =
     viewModeRaw === "day" || viewModeRaw === "week" || viewModeRaw === "month"
@@ -204,6 +222,10 @@ async function updateClass(formData: FormData) {
       : "week";
 
   if (!classId || !locationId || !dateStr || !timeStr || !durationMinutes) {
+    return;
+  }
+
+  if (minAgeYears != null && maxAgeYears != null && minAgeYears > maxAgeYears) {
     return;
   }
 
@@ -229,6 +251,8 @@ async function updateClass(formData: FormData) {
         endAt,
         mainCategory: mainCategory ? (mainCategory as any) : null,
         subCategory: subCategory ? (subCategory as any) : null,
+        minAgeYears: minAgeYears ?? undefined,
+        maxAgeYears: maxAgeYears ?? undefined,
       },
     });
   } catch (error: any) {
@@ -338,6 +362,8 @@ export default async function SchedulePage({
     instructorName: c.instructor?.name ?? "",
     mainCategory: c.mainCategory ?? null,
     subCategory: c.subCategory ?? null,
+    minAgeYears: c.minAgeYears ?? null,
+    maxAgeYears: c.maxAgeYears ?? null,
   }));
 
   const initialViewRaw = search?.view ?? "week";
