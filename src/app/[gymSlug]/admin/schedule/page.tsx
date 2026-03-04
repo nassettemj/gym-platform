@@ -7,9 +7,9 @@ interface SchedulePageProps {
   params: Promise<{
     gymSlug: string;
   }>;
-  searchParams?: {
+  searchParams?: Promise<{
     view?: string;
-  };
+  }>;
 }
 
 async function createClass(formData: FormData) {
@@ -292,6 +292,8 @@ export default async function SchedulePage({
     redirect("/login");
   }
 
+  const search = searchParams ? await searchParams : undefined;
+
   const now = new Date();
   const startWindow = new Date(now);
   startWindow.setDate(startWindow.getDate() - 14);
@@ -338,7 +340,7 @@ export default async function SchedulePage({
     subCategory: c.subCategory ?? null,
   }));
 
-  const initialViewRaw = searchParams?.view ?? "week";
+  const initialViewRaw = search?.view ?? "week";
   const initialViewMode =
     initialViewRaw === "day" ||
     initialViewRaw === "week" ||
