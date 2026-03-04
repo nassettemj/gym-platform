@@ -152,7 +152,7 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">{gym.name} · Memberships</h1>
+      <h1 className="text-xl font-semibold">{gym.name} · Plans</h1>
 
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between">

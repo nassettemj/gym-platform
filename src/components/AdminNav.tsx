@@ -39,7 +39,7 @@ export function AdminNav({ gymSlug }: { gymSlug: string }) {
             className="block px-3 py-2 hover:bg-white/10"
             onClick={() => setOpen(false)}
           >
-            Memberships
+            Plans
           </Link>
           <Link
             href={`/${gymSlug}/admin/schedule`}

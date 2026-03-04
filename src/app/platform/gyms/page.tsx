@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
@@ -33,7 +32,7 @@ async function createGym(formData: FormData) {
     },
   });
 
-  revalidatePath("/platform/gyms");
+  redirect("/platform/gyms");
 }
 
 export default async function GymsPage() {

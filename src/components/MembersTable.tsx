@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 type MemberRow = {
@@ -17,11 +19,13 @@ type Props = {
 };
 
 export function MembersTable({ members }: Props) {
+  const params = useParams<{ gymSlug: string }>();
+  const gymSlug = params.gymSlug;
+
   const [search, setSearch] = useState("");
   const [ageFilter, setAgeFilter] = useState<"ALL" | "ADULT" | "CHILD">("ALL");
   const [dateFilterMode, setDateFilterMode] = useState<"none" | "before" | "after">("none");
   const [dateFilterValue, setDateFilterValue] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return members.filter((m) => {
@@ -125,38 +129,18 @@ export function MembersTable({ members }: Props) {
             ) : (
               filtered.map((m) => {
                 const created = new Date(m.createdAt).toLocaleDateString();
-                const isExpanded = expandedId === m.id;
                 return (
                   <tr
                     key={m.id}
                     className="border-b border-white/5 hover:bg-white/5"
                   >
                     <td className="px-3 py-2 align-top">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedId(isExpanded ? null : m.id)
-                        }
+                      <Link
+                        href={`/${gymSlug}/admin/members/${m.id}`}
                         className="text-left text-sm font-medium text-orange-300 hover:text-orange-200"
                       >
                         {m.firstName} {m.lastName}
-                      </button>
-                      {isExpanded && (
-                        <div className="mt-1 text-xs text-white/70 space-y-0.5">
-                          {m.email && (
-                            <div>
-                              <span className="font-semibold">Email:</span>{" "}
-                              {m.email}
-                            </div>
-                          )}
-                          {m.phone && (
-                            <div>
-                              <span className="font-semibold">Phone:</span>{" "}
-                              {m.phone}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-white/80">
                       {m.memberType === "ADULT" ? "Adult" : "Child"}
