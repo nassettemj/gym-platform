@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
-interface RouteContext {
-  params: {
-    memberId: string;
-  };
-}
-
-export async function GET(_req: Request, { params }: RouteContext) {
+export async function GET(
+  _req: Request,
+  context: { params: Promise<{ memberId: string }> },
+) {
+  const { memberId } = await context.params;
   const session = await auth();
   const user = session?.user as any;
 
@@ -17,7 +15,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
   }
 
   const member = await prisma.member.findUnique({
-    where: { id: params.memberId },
+    where: { id: memberId },
     select: {
       firstName: true,
       lastName: true,
