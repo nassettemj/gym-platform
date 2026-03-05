@@ -3,8 +3,8 @@ import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { getAgeAt } from "@/lib/age";
 import { MemberProfilePanel } from "@/components/MemberProfilePanel";
+import { MemberBeltPanel } from "@/components/MemberBeltPanel";
 import { BeltRank } from "@prisma/client";
-import { MemberHeaderWithHistory } from "./MemberHeaderWithHistory";
 
 const BELT_OPTIONS: readonly BeltRank[] = [
   "WHITE",
@@ -25,11 +25,11 @@ interface MemberDetailPageProps {
 async function updateMemberProfile(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const memberId = String(formData.get("memberId") ?? "");
   const firstNameRaw = String(formData.get("firstName") ?? "").trim();
   const lastNameRaw = String(formData.get("lastName") ?? "").trim();
@@ -46,7 +46,7 @@ async function updateMemberProfile(formData: FormData) {
   if (!gym) notFound();
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const member = await prisma.member.findFirst({
@@ -62,14 +62,47 @@ async function updateMemberProfile(formData: FormData) {
   });
   if (!member) notFound();
 
+  // Each profile field has its own form; missing/empty values mean "leave unchanged".
   const newFirstName = firstNameRaw || member.firstName;
   const newLastName = lastNameRaw || member.lastName;
-  const newEmail = emailRaw || null;
-  const newPhone = phoneRaw || null;
-  let newBirthDate: Date | null = null;
+  const newEmail = emailRaw ? emailRaw : member.email;
+  // Normalize and validate phone (E.164) and birthday (ISO 8601 date).
+  let newPhone: string | null = member.phone;
+  if (phoneRaw !== "") {
+    // Basic normalization: strip spaces and hyphens.
+    const normalizedPhone = phoneRaw.replace(/[\s-]+/g, "");
+    const e164Regex = /^\+[1-9]\d{1,14}$/;
+    if (!e164Regex.test(normalizedPhone)) {
+      redirect(
+        `/${gymSlug}/admin/members/${memberId}?profileError=${encodeURIComponent(
+          "Phone number must be in E.164 format, e.g. +31612345678.",
+        )}`,
+      );
+    }
+    newPhone = normalizedPhone;
+  }
+  // else: leave newPhone as member.phone (preserve when form didn't submit phone)
+
+  let newBirthDate: Date | null = member.birthDate;
   if (birthDateRaw) {
+    // Require strict ISO 8601 date string (YYYY-MM-DD).
+    const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!isoDateRegex.test(birthDateRaw)) {
+      redirect(
+        `/${gymSlug}/admin/members/${memberId}?profileError=${encodeURIComponent(
+          "Birthday must be a valid ISO 8601 date (YYYY-MM-DD).",
+        )}`,
+      );
+    }
     const d = new Date(`${birthDateRaw}T00:00:00.000Z`);
-    if (!Number.isNaN(d.getTime())) newBirthDate = d;
+    if (Number.isNaN(d.getTime())) {
+      redirect(
+        `/${gymSlug}/admin/members/${memberId}?profileError=${encodeURIComponent(
+          "Birthday must be a valid ISO 8601 date (YYYY-MM-DD).",
+        )}`,
+      );
+    }
+    newBirthDate = d;
   }
 
   const logs: { fieldName: string; previousValue: string | null; newValue: string | null }[] = [];
@@ -150,10 +183,10 @@ async function updateBeltStripes(formData: FormData) {
 
   const session = await auth();
   const user = session?.user as { id?: string; role?: string; gymId?: string };
-  if (!user) redirect("/login");
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const userId = user.id ?? (session as any)?.user?.id;
 
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const memberId = String(formData.get("memberId") ?? "");
   const beltRaw = String(formData.get("belt") ?? "").trim();
   const stripesRaw = String(formData.get("stripes") ?? "").trim();
@@ -170,7 +203,7 @@ async function updateBeltStripes(formData: FormData) {
   if (!gym) notFound();
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const member = await prisma.member.findFirst({
@@ -231,9 +264,8 @@ async function createCheckIn(formData: FormData) {
 
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const memberId = String(formData.get("memberId") ?? "");
   const classId = String(formData.get("classId") ?? "").trim();
 
@@ -246,7 +278,7 @@ async function createCheckIn(formData: FormData) {
   if (!gym) notFound();
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const [member, clazz, activeSubscription] = await Promise.all([
@@ -348,9 +380,8 @@ async function addSubscription(formData: FormData) {
 
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const memberId = String(formData.get("memberId") ?? "");
   const planId = String(formData.get("planId") ?? "");
   const startDateRaw = String(formData.get("startDate") ?? "").trim();
@@ -367,8 +398,12 @@ async function addSubscription(formData: FormData) {
     notFound();
   }
 
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+  const canDelete =
+    user.role === "PLATFORM_ADMIN" ||
+    (user.role === "GYM_ADMIN" && user.gymId === gym.id);
+
+  if (!canDelete) {
+    redirect(`/${gymSlug}/login`);
   }
 
   const plan = await prisma.membershipPlan.findFirst({
@@ -406,9 +441,8 @@ async function cancelSubscription(formData: FormData) {
 
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const memberId = String(formData.get("memberId") ?? "");
   const subscriptionId = String(formData.get("subscriptionId") ?? "");
   const cancelDateRaw = String(formData.get("cancelDate") ?? "").trim();
@@ -425,7 +459,7 @@ async function cancelSubscription(formData: FormData) {
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const subscription = await prisma.subscription.findFirst({
@@ -455,17 +489,89 @@ async function cancelSubscription(formData: FormData) {
   redirect(`/${gymSlug}/admin/members/${memberId}`);
 }
 
+async function deleteMember(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const user = session?.user as any;
+
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  const memberId = String(formData.get("memberId") ?? "");
+  const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
+
+  if (!gymSlug || !memberId) return;
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+
+  // Require explicit confirmation text to reduce accidental deletions.
+  if (confirm !== "DELETE") {
+    return;
+  }
+
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    select: { id: true },
+  });
+
+  if (!gym) {
+    notFound();
+  }
+
+  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+    redirect(`/${gymSlug}/login`);
+  }
+
+  const member = await prisma.member.findFirst({
+    where: {
+      id: memberId,
+      gymId: gym.id,
+    },
+    select: { id: true },
+  });
+
+  if (!member) return;
+
+  const memberUser = await prisma.user.findFirst({
+    where: { memberId: member.id },
+    select: { id: true },
+  });
+
+  if (memberUser) {
+    await prisma.memberBeltStripeLog.deleteMany({
+      where: { changedByUserId: memberUser.id },
+    });
+    await prisma.memberProfileChangeLog.deleteMany({
+      where: { changedByUserId: memberUser.id },
+    });
+    await prisma.user.delete({
+      where: { id: memberUser.id },
+    });
+  }
+
+  await prisma.member.delete({
+    where: { id: member.id },
+  });
+
+  redirect(`/${gymSlug}/admin/members`);
+}
+
 export default async function MemberDetailPage({
   params,
   searchParams,
 }: MemberDetailPageProps) {
+  const { gymSlug, memberId } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug, memberId } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const beltError = typeof resolvedSearchParams.beltError === "string" ? resolvedSearchParams.beltError : null;
+  const beltError =
+    typeof resolvedSearchParams.beltError === "string"
+      ? resolvedSearchParams.beltError
+      : null;
+  const profileError =
+    typeof resolvedSearchParams.profileError === "string"
+      ? resolvedSearchParams.profileError
+      : null;
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -480,14 +586,10 @@ export default async function MemberDetailPage({
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
-  const now = new Date();
-  const classWindowEnd = new Date(now);
-  classWindowEnd.setDate(classWindowEnd.getDate() + 60);
-
-  const [member, plans, classesForCheckIn] = await Promise.all([
+  const [member, plans] = await Promise.all([
     prisma.member.findFirst({
       where: {
         id: memberId,
@@ -516,31 +618,33 @@ export default async function MemberDetailPage({
       where: { gymId: gym.id },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.class.findMany({
-      where: {
-        location: { gymId: gym.id },
-        startAt: { gte: now, lte: classWindowEnd },
-      },
-      include: { location: true },
-      orderBy: { startAt: "asc" },
-      take: 100,
-    }),
   ]);
 
   if (!member) {
     notFound();
   }
 
+  const isMemberViewer = user.role === "MEMBER";
+  const isProfileComplete = !!member.birthDate && !!member.phone;
+  const hideMemberExtras = isMemberViewer && !isProfileComplete;
+
   return (
     <div className="space-y-4">
-      <MemberHeaderWithHistory
-        gymName={gym.name}
-        memberName={`${member.firstName} ${member.lastName}`}
-        logs={member.profileChangeLogs}
-      />
-
+      {hideMemberExtras && (
+        <div
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          role="alert"
+        >
+          Please fill in your Birthday and Phone number for additional features to become visible.
+        </div>
+      )}
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
-        <h2 className="text-sm font-medium text-white/80">Profile</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-white/80">Profile</h2>
+          <span className="text-sm text-white/80 uppercase">
+            {member.status}
+          </span>
+        </div>
         <MemberProfilePanel
           member={{
             id: member.id,
@@ -555,52 +659,46 @@ export default async function MemberDetailPage({
           }}
           gymSlug={gymSlug}
           updateAction={updateMemberProfile}
-          updateBeltStripesAction={updateBeltStripes}
-          beltStripeLogs={member.beltStripeLogs}
-          beltError={beltError}
+          deleteAction={deleteMember}
+          canDeleteMember={
+            user.role === "PLATFORM_ADMIN" || user.role === "GYM_ADMIN"
+          }
+          canEditProfile={
+            user.role === "PLATFORM_ADMIN" || user.role === "GYM_ADMIN"
+          }
+          profileError={profileError}
         />
       </section>
 
-      {classesForCheckIn.length > 0 && (
+      {!hideMemberExtras && (
         <section className="border border-white/10 rounded-xl p-4 space-y-3">
-          <h2 className="text-sm font-medium text-white/80">Check in to class</h2>
-          <form action={createCheckIn} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="gymSlug" value={gymSlug} />
-            <input type="hidden" name="memberId" value={member.id} />
-            <div className="flex flex-col gap-1">
-              <label htmlFor="classId" className="text-xs font-medium text-white/80">
-                Class
-              </label>
-              <select
-                id="classId"
-                name="classId"
-                required
-                className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-              >
-                <option value="">Select class…</option>
-                {classesForCheckIn.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · {c.startAt ? new Date(c.startAt).toLocaleString() : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-orange-600 text-[11px] font-medium hover:bg-orange-500"
-            >
-              Check in
-            </button>
-          </form>
+          <h2 className="text-sm font-medium text-white/80">
+            Belt &amp; Stripes
+          </h2>
+          <MemberBeltPanel
+            member={{
+              id: member.id,
+              belt: member.belt,
+              stripes: member.stripes,
+            }}
+            gymSlug={gymSlug}
+            updateBeltStripesAction={updateBeltStripes}
+            beltStripeLogs={member.beltStripeLogs}
+            beltError={beltError}
+            canEdit={
+              user.role === "PLATFORM_ADMIN" || user.role === "GYM_ADMIN"
+            }
+          />
         </section>
       )}
 
-      <section className="border border-white/10 rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white/80">Plans</h2>
-        </div>
+      {!hideMemberExtras && (
+        <section className="border border-white/10 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-white/80">Plans</h2>
+          </div>
 
-        {plans.length > 0 && (
+          {plans.length > 0 && (
           <details className="border border-white/10 rounded-md p-3 text-xs space-y-2">
             <summary className="cursor-pointer list-none flex items-center justify-between">
               <span className="font-medium text-white/80">Add plan</span>
@@ -793,6 +891,7 @@ export default async function MemberDetailPage({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

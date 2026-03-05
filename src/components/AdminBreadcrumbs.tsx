@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 // @ts-expect-error usePathname is available at runtime in the App Router,
 // but current TypeScript configuration does not see its type export.
 import { usePathname } from "next/navigation";
@@ -24,6 +25,37 @@ export function AdminBreadcrumbs({ gymSlug }: AdminBreadcrumbsProps) {
   // segments: [gymSlug, "admin", ...rest]
   const rest = segments.slice(2);
 
+  const isMemberDetail =
+    rest.length >= 2 && rest[0] === "members" && rest[rest.length - 1];
+  const memberId = isMemberDetail ? rest[rest.length - 1] : null;
+
+  const [memberName, setMemberName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!memberId || !isMemberDetail) {
+      setMemberName(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/members/${memberId}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { name?: string };
+        if (!cancelled && data?.name) {
+          setMemberName(data.name);
+        }
+      } catch {
+        // ignore fetch errors
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memberId, isMemberDetail]);
+
   const rootHref = `/${gymSlug}/admin`;
   const crumbs: { href: string; label: string }[] = [
     { href: rootHref, label: "Gym Admin" },
@@ -32,9 +64,19 @@ export function AdminBreadcrumbs({ gymSlug }: AdminBreadcrumbsProps) {
   let acc = rootHref;
   for (const seg of rest) {
     acc += `/${seg}`;
+    const isLastSeg = seg === rest[rest.length - 1];
+
+    let label: string;
+    if (isMemberDetail && isLastSeg) {
+      // Prefer the fetched member name, but never show the raw memberId.
+      label = memberName || "Member";
+    } else {
+      label = humanizeSegment(seg);
+    }
+
     crumbs.push({
       href: acc,
-      label: humanizeSegment(seg),
+      label,
     });
   }
 

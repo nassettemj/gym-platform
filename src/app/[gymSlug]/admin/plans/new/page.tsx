@@ -28,12 +28,13 @@ function mapBillingIntervalToDays(value: string): number {
 async function createPlan(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
@@ -84,11 +85,11 @@ async function createPlan(formData: FormData) {
 }
 
 export default async function NewPlanPage({ params }: NewPlanPageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -101,7 +102,7 @@ export default async function NewPlanPage({ params }: NewPlanPageProps) {
   if (!gym) notFound();
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   return (

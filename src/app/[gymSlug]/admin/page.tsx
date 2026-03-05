@@ -9,14 +9,14 @@ interface AdminPageProps {
 }
 
 export default async function GymAdminIndex({ params }: AdminPageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
 
   if (!user) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
-
-  const { gymSlug } = await params;
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -29,7 +29,7 @@ export default async function GymAdminIndex({ params }: AdminPageProps) {
 
   // Allow platform admins or users whose gymId matches this gym
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   return (

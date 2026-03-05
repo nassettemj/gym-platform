@@ -6,12 +6,13 @@ import { prisma } from "@/lib/prisma";
 
 export type LoginState = { error: string } | null;
 
-export async function login(
+export async function loginWithSlug(
   _prevState: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
+  const gymSlug = String(formData.get("gymSlug") ?? "").trim();
 
   if (!email || !password) return null;
 
@@ -20,8 +21,9 @@ export async function login(
     result = await signIn("credentials", {
       email,
       password,
+      gymSlug,
       redirect: false,
-      redirectTo: "/platform/gyms",
+      redirectTo: gymSlug ? `/${gymSlug}/admin` : "/platform/gyms",
     });
   } catch (err: unknown) {
     const e = err as { name?: string };
@@ -32,30 +34,31 @@ export async function login(
   }
 
   if (!result) return null;
-  // Decide final landing page based on role and gym.
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      role: true,
-      memberId: true,
-      gym: { select: { slug: true } },
+  // Decide final landing page based on role.
+  const user = await prisma.user.findFirst({
+    where: {
+      email,
+      ...(gymSlug
+        ? {
+            gym: {
+              slug: gymSlug,
+            },
+          }
+        : {}),
     },
+    select: { role: true, memberId: true },
   });
 
   if (user?.role === "PLATFORM_ADMIN") {
     redirect("/platform/gyms");
   }
 
-  const gymSlug = user?.gym?.slug;
+  if (gymSlug && user?.role === "GYM_ADMIN") {
+    redirect(`/${gymSlug}/admin`);
+  }
 
-  if (gymSlug) {
-    if (user?.role === "MEMBER" && user.memberId) {
-      redirect(`/${gymSlug}/admin/members/${user.memberId}`);
-    }
-
-    if (user?.role === "GYM_ADMIN") {
-      redirect(`/${gymSlug}/admin`);
-    }
+  if (gymSlug && user?.role === "MEMBER" && user.memberId) {
+    redirect(`/${gymSlug}/admin/members/${user.memberId}`);
   }
 
   if (typeof result === "string") {
@@ -69,3 +72,4 @@ export async function login(
 
   return null;
 }
+

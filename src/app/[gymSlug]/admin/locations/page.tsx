@@ -11,12 +11,13 @@ interface LocationsPageProps {
 async function createLocation(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
   const zipCode = String(formData.get("zipCode") ?? "").trim();
@@ -41,11 +42,11 @@ async function createLocation(formData: FormData) {
 }
 
 export default async function LocationsPage({ params }: LocationsPageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -59,7 +60,7 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   return (

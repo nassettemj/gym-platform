@@ -10,18 +10,30 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        // Optional; used by custom per-gym login pages.
+        gymSlug: { label: "Gym Slug", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) return null;
 
         const email = String(credentials.email).trim();
         const password = String(credentials.password);
+        const gymSlug = String((credentials as any).gymSlug ?? "").trim();
 
         if (!email || !password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-        });
+        const user = gymSlug
+          ? await prisma.user.findFirst({
+              where: {
+                email,
+                gym: {
+                  slug: gymSlug,
+                },
+              },
+            })
+          : await prisma.user.findUnique({
+              where: { email },
+            });
         if (!user || !user.password) return null;
 
         const valid = await bcrypt.compare(password, user.password);
@@ -33,6 +45,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           name: user.name,
           role: user.role,
           gymId: user.gymId,
+          memberId: user.memberId,
         };
       },
     }),
@@ -42,6 +55,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       if (user) {
         token.role = (user as any).role;
         (token as any).gymId = (user as any).gymId;
+        (token as any).memberId = (user as any).memberId;
       }
       return token;
     },
@@ -50,6 +64,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         (session.user as any).id = token.sub;
         (session.user as any).role = (token as any).role;
         (session.user as any).gymId = (token as any).gymId;
+        (session.user as any).memberId = (token as any).memberId;
       }
       return session;
     },

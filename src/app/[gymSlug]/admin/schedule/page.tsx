@@ -16,12 +16,13 @@ interface SchedulePageProps {
 export async function createClass(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const locationId = String(formData.get("locationId") ?? "");
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
   const instructorId = instructorIdRaw || null;
@@ -203,11 +204,11 @@ export async function createClass(formData: FormData) {
 async function updateClass(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const classId = String(formData.get("classId") ?? "");
   const locationId = String(formData.get("locationId") ?? "");
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
@@ -274,11 +275,11 @@ async function updateClass(formData: FormData) {
 async function deleteClass(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const classId = String(formData.get("classId") ?? "");
   const viewModeRaw = String(formData.get("viewMode") ?? "week");
   const viewMode =
@@ -298,11 +299,11 @@ async function deleteClass(formData: FormData) {
 export async function bulkUpdateClasses(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const rawPayload = formData.get("bulkPayload");
   if (!rawPayload) {
     redirect(`/${gymSlug}/admin/schedule`);
@@ -384,11 +385,11 @@ export async function bulkUpdateClasses(formData: FormData) {
 export async function bulkCreateOnDates(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const datesJson = String(formData.get("datesJson") ?? "[]");
   const name = String(formData.get("name") ?? "").trim();
   const locationId = String(formData.get("locationId") ?? "");
@@ -464,11 +465,11 @@ export default async function SchedulePage({
   params,
   searchParams,
 }: SchedulePageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -487,7 +488,7 @@ export default async function SchedulePage({
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const search = searchParams ? await searchParams : undefined;

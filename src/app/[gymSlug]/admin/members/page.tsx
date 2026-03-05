@@ -13,12 +13,13 @@ interface MembersPageProps {
 async function createMember(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
@@ -67,11 +68,11 @@ async function createMember(formData: FormData) {
 }
 
 export default async function MembersPage({ params }: MembersPageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -87,7 +88,7 @@ export default async function MembersPage({ params }: MembersPageProps) {
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const memberCount = gym.members.length;

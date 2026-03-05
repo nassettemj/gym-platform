@@ -11,11 +11,11 @@ interface NewSchedulePageProps {
 }
 
 export default async function NewSchedulePage({ params }: NewSchedulePageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -30,7 +30,7 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   const locationsForSelect = gym.locations.map((loc) => ({

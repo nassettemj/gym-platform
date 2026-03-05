@@ -28,12 +28,13 @@ function mapBillingIntervalToDays(value: string): number {
 async function createPlan(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
@@ -91,12 +92,13 @@ async function createPlan(formData: FormData) {
 async function updatePlan(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const planId = String(formData.get("planId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
@@ -146,12 +148,13 @@ async function updatePlan(formData: FormData) {
 async function deletePlan(formData: FormData) {
   "use server";
 
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const planId = String(formData.get("planId") ?? "");
-  const gymSlug = String(formData.get("gymSlug") ?? "");
   const confirm = String(formData.get("confirm") ?? "").trim();
 
   if (!planId || confirm !== "delete") return;
@@ -165,11 +168,11 @@ async function deletePlan(formData: FormData) {
 }
 
 export default async function MembershipsPage({ params }: MembershipsPageProps) {
+  const { gymSlug } = await params;
+
   const session = await auth();
   const user = session?.user as any;
-  if (!user) redirect("/login");
-
-  const { gymSlug } = await params;
+  if (!user) redirect(`/${gymSlug}/login`);
 
   let gym;
   try {
@@ -190,7 +193,7 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
   }
 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect("/login");
+    redirect(`/${gymSlug}/login`);
   }
 
   return (
