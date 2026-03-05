@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { BillingInterval, CreditInterval } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { MembershipPlanForm } from "@/components/MembershipPlanForm";
@@ -61,7 +62,9 @@ async function createPlan(formData: FormData) {
       durationDays,
       maxCheckInsPerMonth: null,
       billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-      billingInterval: billingInterval || null,
+      billingInterval: billingInterval
+        ? (billingInterval as BillingInterval)
+        : null,
       intervalCount: 1,
       usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
       creditsPerPeriod:
@@ -70,7 +73,7 @@ async function createPlan(formData: FormData) {
           : null,
       creditsPeriodUnit:
         usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? (creditsPeriodUnit || "WEEK")
+          ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
           : null,
       stripeProductId: null,
       stripePriceId: null,
