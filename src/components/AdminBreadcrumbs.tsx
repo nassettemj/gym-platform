@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+// @ts-expect-error usePathname is available at runtime in the App Router,
+// but current TypeScript configuration does not see its type export.
 import { usePathname } from "next/navigation";
 
 interface AdminBreadcrumbsProps {
