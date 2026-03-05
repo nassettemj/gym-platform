@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { BillingInterval } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
@@ -53,37 +54,6 @@ async function createPlan(formData: FormData) {
       : mapBillingIntervalToDays(billingInterval || "MONTH");
   const priceCents = Math.round(priceNumber * 100);
 
-  // #region agent log
-  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "8055e2",
-    },
-    body: JSON.stringify({
-      sessionId: "8055e2",
-      runId: "plan-create",
-      hypothesisId: "create-input",
-      location: "src/app/[gymSlug]/admin/memberships/page.tsx:createPlan:beforeCreate",
-      message: "createPlan input parsed",
-      data: {
-        gymId,
-        gymSlug,
-        name,
-        priceNumber,
-        priceCents,
-        billingKind,
-        billingInterval,
-        usageKind,
-        creditsPerPeriodRaw,
-        creditsPeriodUnit,
-        durationDays,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion agent log
-
   try {
     await prisma.membershipPlan.create({
       data: {
@@ -94,7 +64,9 @@ async function createPlan(formData: FormData) {
         durationDays,
         maxCheckInsPerMonth: null,
         billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-        billingInterval: billingInterval || null,
+        billingInterval: billingInterval
+          ? (billingInterval as BillingInterval)
+          : null,
         intervalCount: 1,
         usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
         creditsPerPeriod:
@@ -110,30 +82,6 @@ async function createPlan(formData: FormData) {
       },
     });
   } catch (err) {
-    // #region agent log
-    fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "8055e2",
-      },
-      body: JSON.stringify({
-        sessionId: "8055e2",
-        runId: "plan-create",
-        hypothesisId: "create-error",
-        location: "src/app/[gymSlug]/admin/memberships/page.tsx:createPlan:catch",
-        message: "createPlan failed",
-        data: {
-          gymId,
-          gymSlug,
-          name,
-          errorName: (err as any)?.name,
-          errorMessage: (err as any)?.message,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
     throw err;
   }
 
@@ -176,7 +124,9 @@ async function updatePlan(formData: FormData) {
       durationDays,
       maxCheckInsPerMonth: null,
       billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-      billingInterval: billingInterval || null,
+      billingInterval: billingInterval
+        ? (billingInterval as BillingInterval)
+        : null,
       intervalCount: 1,
       usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
       creditsPerPeriod:
@@ -221,29 +171,6 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
 
   const { gymSlug } = await params;
 
-  // #region agent log
-  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "8055e2",
-    },
-    body: JSON.stringify({
-      sessionId: "8055e2",
-      runId: "plans-page",
-      hypothesisId: "entry",
-      location: "src/app/[gymSlug]/admin/memberships/page.tsx:entry",
-      message: "MembershipsPage entry",
-      data: {
-        gymSlug,
-        userId: user.id ?? null,
-        userRole: user.role ?? null,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion agent log
-
   let gym;
   try {
     gym = await prisma.gym.findUnique({
@@ -255,28 +182,6 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
       },
     });
   } catch (err) {
-    // #region agent log
-    fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "8055e2",
-      },
-      body: JSON.stringify({
-        sessionId: "8055e2",
-        runId: "plans-page",
-        hypothesisId: "gym-query-error",
-        location: "src/app/[gymSlug]/admin/memberships/page.tsx:gymQuery",
-        message: "MembershipsPage gym query failed",
-        data: {
-          gymSlug,
-          errorName: (err as any)?.name,
-          errorMessage: (err as any)?.message,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
     throw err;
   }
 
@@ -287,29 +192,6 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
   if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
     redirect("/login");
   }
-
-  // #region agent log
-  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "8055e2",
-    },
-    body: JSON.stringify({
-      sessionId: "8055e2",
-      runId: "plans-page",
-      hypothesisId: "loaded",
-      location: "src/app/[gymSlug]/admin/memberships/page.tsx:loaded",
-      message: "MembershipsPage loaded gym and plans",
-      data: {
-        gymId: gym.id,
-        gymSlug,
-        planCount: gym.membershipPlans.length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion agent log
 
   return (
     <div className="space-y-4">
