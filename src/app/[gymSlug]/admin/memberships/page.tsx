@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { BillingInterval } from "@prisma/client";
+import type { BillingInterval, CreditInterval } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
@@ -75,7 +75,7 @@ async function createPlan(formData: FormData) {
             : null,
         creditsPeriodUnit:
           usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-            ? (creditsPeriodUnit || "WEEK")
+            ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
             : null,
         stripeProductId: null,
         stripePriceId: null,
@@ -135,7 +135,7 @@ async function updatePlan(formData: FormData) {
           : null,
       creditsPeriodUnit:
         usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? (creditsPeriodUnit || "WEEK")
+          ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
           : null,
     },
   });
