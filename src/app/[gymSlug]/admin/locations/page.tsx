@@ -64,8 +64,6 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">{gym.name} · Locations</h1>
-
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <h2 className="text-sm font-medium text-white/80">Add location</h2>
         <form

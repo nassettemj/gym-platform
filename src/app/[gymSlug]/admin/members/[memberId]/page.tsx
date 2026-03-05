@@ -4,9 +4,15 @@ import { redirect, notFound } from "next/navigation";
 import { getAgeAt } from "@/lib/age";
 import { MemberProfilePanel } from "@/components/MemberProfilePanel";
 import { BeltRank } from "@prisma/client";
+import { MemberHeaderWithHistory } from "./MemberHeaderWithHistory";
 
-const BELT_OPTIONS: readonly (keyof typeof BeltRank)[] = ["WHITE", "BLUE", "PURPLE", "BROWN", "BLACK"];
-const STRIPE_OPTIONS = [0, 1, 2, 3, 4] as const;
+const BELT_OPTIONS: readonly BeltRank[] = [
+  "WHITE",
+  "BLUE",
+  "PURPLE",
+  "BROWN",
+  "BLACK",
+];
 
 interface MemberDetailPageProps {
   params: Promise<{
@@ -25,6 +31,8 @@ async function updateMemberProfile(formData: FormData) {
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
   const memberId = String(formData.get("memberId") ?? "");
+  const firstNameRaw = String(formData.get("firstName") ?? "").trim();
+  const lastNameRaw = String(formData.get("lastName") ?? "").trim();
   const emailRaw = String(formData.get("email") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   const birthDateRaw = String(formData.get("birthDate") ?? "").trim();
@@ -43,10 +51,19 @@ async function updateMemberProfile(formData: FormData) {
 
   const member = await prisma.member.findFirst({
     where: { id: memberId, gymId: gym.id },
-    select: { id: true, email: true, phone: true, birthDate: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      birthDate: true,
+    },
   });
   if (!member) notFound();
 
+  const newFirstName = firstNameRaw || member.firstName;
+  const newLastName = lastNameRaw || member.lastName;
   const newEmail = emailRaw || null;
   const newPhone = phoneRaw || null;
   let newBirthDate: Date | null = null;
@@ -57,6 +74,20 @@ async function updateMemberProfile(formData: FormData) {
 
   const logs: { fieldName: string; previousValue: string | null; newValue: string | null }[] = [];
 
+  if (member.firstName !== newFirstName) {
+    logs.push({
+      fieldName: "firstName",
+      previousValue: member.firstName,
+      newValue: newFirstName,
+    });
+  }
+  if (member.lastName !== newLastName) {
+    logs.push({
+      fieldName: "lastName",
+      previousValue: member.lastName,
+      newValue: newLastName,
+    });
+  }
   if (member.email !== newEmail) {
     logs.push({
       fieldName: "email",
@@ -90,7 +121,13 @@ async function updateMemberProfile(formData: FormData) {
   await prisma.$transaction([
     prisma.member.update({
       where: { id: member.id },
-      data: { email: newEmail, phone: newPhone, birthDate: newBirthDate },
+      data: {
+        firstName: newFirstName,
+        lastName: newLastName,
+        email: newEmail,
+        phone: newPhone,
+        birthDate: newBirthDate,
+      },
     }),
     ...logs.map((log) =>
       prisma.memberProfileChangeLog.create({
@@ -182,6 +219,7 @@ async function updateBeltStripes(formData: FormData) {
     ]);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
     redirect(`/${gymSlug}/admin/members/${memberId}?beltError=${encodeURIComponent(message)}`);
   }
 
@@ -211,7 +249,7 @@ async function createCheckIn(formData: FormData) {
     redirect("/login");
   }
 
-  const [member, clazz] = await Promise.all([
+  const [member, clazz, activeSubscription] = await Promise.all([
     prisma.member.findFirst({
       where: { id: memberId, gymId: gym.id },
       select: { id: true, birthDate: true },
@@ -222,6 +260,16 @@ async function createCheckIn(formData: FormData) {
         location: { gymId: gym.id },
       },
       include: { location: true },
+    }),
+    prisma.subscription.findFirst({
+      where: {
+        memberId,
+        status: "ACTIVE",
+      },
+      include: {
+        plan: true,
+      },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -238,6 +286,49 @@ async function createCheckIn(formData: FormData) {
     }
     if (clazz.maxAgeYears != null && age > clazz.maxAgeYears) {
       redirect(`/${gymSlug}/admin/members/${memberId}?error=too_old`);
+    }
+  }
+
+  // Enforce plan usage limits if there is an active subscription with limited credits.
+  if (activeSubscription?.plan?.usageKind === "LIMITED_CREDITS" && activeSubscription.plan.creditsPerPeriod != null && activeSubscription.plan.creditsPeriodUnit != null) {
+    const unit = activeSubscription.plan.creditsPeriodUnit;
+
+    let windowStart = new Date(at);
+    let windowEnd = new Date(at);
+
+    if (unit === "DAY") {
+      windowStart.setHours(0, 0, 0, 0);
+      windowEnd.setHours(23, 59, 59, 999);
+    } else if (unit === "WEEK") {
+      const day = windowStart.getDay(); // 0 (Sun) - 6 (Sat)
+      const diffToMonday = (day + 6) % 7; // Monday as start of week
+      windowStart.setDate(windowStart.getDate() - diffToMonday);
+      windowStart.setHours(0, 0, 0, 0);
+      windowEnd = new Date(windowStart);
+      windowEnd.setDate(windowEnd.getDate() + 7);
+    } else if (unit === "MONTH") {
+      windowStart = new Date(windowStart.getFullYear(), windowStart.getMonth(), 1, 0, 0, 0, 0);
+      windowEnd = new Date(windowStart.getFullYear(), windowStart.getMonth() + 1, 1, 0, 0, 0, 0);
+    } else if (unit === "YEAR") {
+      windowStart = new Date(windowStart.getFullYear(), 0, 1, 0, 0, 0, 0);
+      windowEnd = new Date(windowStart.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
+    } else if (unit === "NONE") {
+      windowStart = activeSubscription.startsAt;
+      windowEnd = activeSubscription.endsAt;
+    }
+
+    const usedCount = await prisma.checkIn.count({
+      where: {
+        memberId: member.id,
+        checkedAt: {
+          gte: windowStart,
+          lt: windowEnd,
+        },
+      },
+    });
+
+    if (usedCount >= activeSubscription.plan.creditsPerPeriod) {
+      redirect(`/${gymSlug}/admin/members/${memberId}?error=usage_limit_reached`);
     }
   }
 
@@ -442,150 +533,32 @@ export default async function MemberDetailPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">
-        {gym.name} · {member.firstName} {member.lastName}
-      </h1>
+      <MemberHeaderWithHistory
+        gymName={gym.name}
+        memberName={`${member.firstName} ${member.lastName}`}
+        logs={member.profileChangeLogs}
+      />
 
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
+        <h2 className="text-sm font-medium text-white/80">Profile</h2>
         <MemberProfilePanel
           member={{
             id: member.id,
+            firstName: member.firstName,
+            lastName: member.lastName,
             email: member.email,
             phone: member.phone,
             birthDate: member.birthDate,
+            belt: member.belt,
+            stripes: member.stripes,
             status: member.status,
           }}
           gymSlug={gymSlug}
           updateAction={updateMemberProfile}
+          updateBeltStripesAction={updateBeltStripes}
+          beltStripeLogs={member.beltStripeLogs}
+          beltError={beltError}
         />
-      </section>
-
-      <section className="border border-white/10 rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-medium text-white/80">Belt & stripes</h2>
-        {beltError && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
-            {beltError}
-          </p>
-        )}
-        <form action={updateBeltStripes} className="flex flex-wrap items-end gap-3">
-          <input type="hidden" name="gymSlug" value={gymSlug} />
-          <input type="hidden" name="memberId" value={member.id} />
-          <div className="flex flex-col gap-1">
-            <label htmlFor="belt" className="text-xs font-medium text-white/80">
-              Belt
-            </label>
-            <select
-              id="belt"
-              name="belt"
-              className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-              defaultValue={member.belt ?? ""}
-            >
-              <option value="">—</option>
-              {BELT_OPTIONS.map((b) => (
-                <option key={b} value={b}>
-                  {b.charAt(0) + b.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="stripes" className="text-xs font-medium text-white/80">
-              Stripes
-            </label>
-            <select
-              id="stripes"
-              name="stripes"
-              className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-              defaultValue={member.stripes ?? ""}
-            >
-              <option value="">—</option>
-              {STRIPE_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-orange-600 text-[11px] font-medium hover:bg-orange-500"
-          >
-            Update
-          </button>
-        </form>
-      </section>
-
-      <section className="border border-white/10 rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-medium text-white/80">Belt & stripes history</h2>
-        {member.beltStripeLogs.length === 0 ? (
-          <p className="text-xs text-white/60">No belt or stripe changes recorded.</p>
-        ) : (
-          <ul className="space-y-2 text-xs">
-            {member.beltStripeLogs.map((log) => {
-              const when = new Date(log.changedAt).toLocaleString();
-              const by = log.changedByUser?.name ?? "—";
-              const beltPart =
-                log.previousBelt != null || log.newBelt != null
-                  ? `Belt: ${log.previousBelt ?? "—"} → ${log.newBelt ?? "—"}`
-                  : null;
-              const stripePart =
-                log.previousStripes != null || log.newStripes != null
-                  ? `Stripes: ${log.previousStripes ?? "—"} → ${log.newStripes ?? "—"}`
-                  : null;
-              return (
-                <li
-                  key={log.id}
-                  className="border border-white/10 rounded-md px-3 py-2 bg-black/40"
-                >
-                  <div className="flex justify-between gap-2">
-                    <span className="text-white/90">{when}</span>
-                    <span className="text-white/60">by {by}</span>
-                  </div>
-                  {(beltPart || stripePart) && (
-                    <div className="mt-1 text-white/80">
-                      {[beltPart, stripePart].filter(Boolean).join(" · ")}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="border border-white/10 rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-medium text-white/80">Profile change history</h2>
-        {member.profileChangeLogs.length === 0 ? (
-          <p className="text-xs text-white/60">No profile changes recorded.</p>
-        ) : (
-          <ul className="space-y-2 text-xs">
-            {member.profileChangeLogs.map((log) => {
-              const when = new Date(log.changedAt).toLocaleString();
-              const by = log.changedByUser?.name ?? "—";
-              const fieldLabel =
-                log.fieldName === "birthDate"
-                  ? "Date of birth"
-                  : log.fieldName.charAt(0).toUpperCase() + log.fieldName.slice(1);
-              return (
-                <li
-                  key={log.id}
-                  className="border border-white/10 rounded-md px-3 py-2 bg-black/40"
-                >
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-white/90">{fieldLabel}</span>
-                    <span className="text-white/60">{when}</span>
-                  </div>
-                  <div className="mt-1 text-white/80">
-                    {log.previousValue ?? "—"} → {log.newValue ?? "—"}
-                  </div>
-                  <div className="mt-1 text-[11px] text-white/60">
-                    Changed by {by}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </section>
 
       {classesForCheckIn.length > 0 && (

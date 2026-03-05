@@ -110,8 +110,6 @@ export default async function MembersPage({ params }: MembersPageProps) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">{gym.name} · Members</h1>
-
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-xs text-white/70">

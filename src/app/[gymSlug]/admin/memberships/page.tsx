@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
-import { MembershipPlanForm } from "@/components/MembershipPlanForm";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
 
 interface MembershipsPageProps {
@@ -10,25 +9,19 @@ interface MembershipsPageProps {
   }>;
 }
 
-function mapDurationToDays(value: string): number {
+function mapBillingIntervalToDays(value: string): number {
   switch (value) {
-    case "single_day":
+    case "DAY":
       return 1;
-    case "week":
+    case "WEEK":
       return 7;
-    case "month":
+    case "MONTH":
       return 30;
-    case "year":
+    case "YEAR":
       return 365;
     default:
       return 30;
   }
-}
-
-function mapClassLimit(value: string): number | null {
-  if (value === "unlimited") return null;
-  const n = parseInt(value, 10);
-  return Number.isNaN(n) ? null : n;
 }
 
 async function createPlan(formData: FormData) {
@@ -42,31 +35,109 @@ async function createPlan(formData: FormData) {
   const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
-  const duration = String(formData.get("duration") ?? "").trim();
-  const classLimit = String(formData.get("classLimit") ?? "").trim();
+  const billingKind = String(formData.get("billingKind") ?? "").trim();
+  const billingInterval = String(formData.get("billingInterval") ?? "").trim();
+  const usageKind = String(formData.get("usageKind") ?? "").trim();
+  const creditsPerPeriodRaw = String(formData.get("creditsPerPeriod") ?? "").trim();
+  const creditsPeriodUnit = String(formData.get("creditsPeriodUnit") ?? "").trim();
 
-  // All fields mandatory
-  if (!gymId || !name || !priceStr || !duration || !classLimit) return;
+  // Mandatory core fields
+  if (!gymId || !name || !priceStr || !billingKind) return;
 
   const priceNumber = Number(priceStr.replace(",", "."));
   if (!Number.isFinite(priceNumber) || priceNumber < 0) return;
 
-  const durationDays = mapDurationToDays(duration);
-  const maxCheckInsPerMonth = mapClassLimit(classLimit);
+  const durationDays =
+    billingKind === "ONE_TIME"
+      ? mapBillingIntervalToDays(billingInterval || "DAY")
+      : mapBillingIntervalToDays(billingInterval || "MONTH");
   const priceCents = Math.round(priceNumber * 100);
 
-  await prisma.membershipPlan.create({
-    data: {
-      gymId,
-      name,
-      description: null,
-      priceCents,
-      durationDays,
-      maxCheckInsPerMonth,
+  // #region agent log
+  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "8055e2",
     },
-  });
+    body: JSON.stringify({
+      sessionId: "8055e2",
+      runId: "plan-create",
+      hypothesisId: "create-input",
+      location: "src/app/[gymSlug]/admin/memberships/page.tsx:createPlan:beforeCreate",
+      message: "createPlan input parsed",
+      data: {
+        gymId,
+        gymSlug,
+        name,
+        priceNumber,
+        priceCents,
+        billingKind,
+        billingInterval,
+        usageKind,
+        creditsPerPeriodRaw,
+        creditsPeriodUnit,
+        durationDays,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion agent log
 
-  redirect(`/${gymSlug}/admin/memberships`);
+  try {
+    await prisma.membershipPlan.create({
+      data: {
+        gymId,
+        name,
+        description: null,
+        priceCents,
+        durationDays,
+        maxCheckInsPerMonth: null,
+        billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
+        billingInterval: billingInterval || null,
+        intervalCount: 1,
+        usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
+        creditsPerPeriod:
+          usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+            ? Number(creditsPerPeriodRaw)
+            : null,
+        creditsPeriodUnit:
+          usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+            ? (creditsPeriodUnit || "WEEK")
+            : null,
+        stripeProductId: null,
+        stripePriceId: null,
+      },
+    });
+  } catch (err) {
+    // #region agent log
+    fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "8055e2",
+      },
+      body: JSON.stringify({
+        sessionId: "8055e2",
+        runId: "plan-create",
+        hypothesisId: "create-error",
+        location: "src/app/[gymSlug]/admin/memberships/page.tsx:createPlan:catch",
+        message: "createPlan failed",
+        data: {
+          gymId,
+          gymSlug,
+          name,
+          errorName: (err as any)?.name,
+          errorMessage: (err as any)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log
+    throw err;
+  }
+
+  redirect(`/${gymSlug}/admin/plans`);
 }
 
 async function updatePlan(formData: FormData) {
@@ -80,16 +151,21 @@ async function updatePlan(formData: FormData) {
   const gymSlug = String(formData.get("gymSlug") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
-  const duration = String(formData.get("duration") ?? "").trim();
-  const classLimit = String(formData.get("classLimit") ?? "").trim();
+  const billingKind = String(formData.get("billingKind") ?? "").trim();
+  const billingInterval = String(formData.get("billingInterval") ?? "").trim();
+  const usageKind = String(formData.get("usageKind") ?? "").trim();
+  const creditsPerPeriodRaw = String(formData.get("creditsPerPeriod") ?? "").trim();
+  const creditsPeriodUnit = String(formData.get("creditsPeriodUnit") ?? "").trim();
 
-  if (!planId || !name || !priceStr || !duration || !classLimit) return;
+  if (!planId || !name || !priceStr || !billingKind) return;
 
   const priceNumber = Number(priceStr.replace(",", "."));
   if (!Number.isFinite(priceNumber) || priceNumber < 0) return;
 
-  const durationDays = mapDurationToDays(duration);
-  const maxCheckInsPerMonth = mapClassLimit(classLimit);
+  const durationDays =
+    billingKind === "ONE_TIME"
+      ? mapBillingIntervalToDays(billingInterval || "DAY")
+      : mapBillingIntervalToDays(billingInterval || "MONTH");
   const priceCents = Math.round(priceNumber * 100);
 
   await prisma.membershipPlan.update({
@@ -98,11 +174,23 @@ async function updatePlan(formData: FormData) {
       name,
       priceCents,
       durationDays,
-      maxCheckInsPerMonth,
+      maxCheckInsPerMonth: null,
+      billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
+      billingInterval: billingInterval || null,
+      intervalCount: 1,
+      usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
+      creditsPerPeriod:
+        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+          ? Number(creditsPerPeriodRaw)
+          : null,
+      creditsPeriodUnit:
+        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+          ? (creditsPeriodUnit || "WEEK")
+          : null,
     },
   });
 
-  redirect(`/${gymSlug}/admin/memberships`);
+  redirect(`/${gymSlug}/admin/plans`);
 }
 
 async function deletePlan(formData: FormData) {
@@ -123,7 +211,7 @@ async function deletePlan(formData: FormData) {
     where: { id: planId },
   });
 
-  redirect(`/${gymSlug}/admin/memberships`);
+  redirect(`/${gymSlug}/admin/plans`);
 }
 
 export default async function MembershipsPage({ params }: MembershipsPageProps) {
@@ -133,14 +221,64 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
 
   const { gymSlug } = await params;
 
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    include: {
-      membershipPlans: {
-        orderBy: { createdAt: "asc" },
-      },
+  // #region agent log
+  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "8055e2",
     },
-  });
+    body: JSON.stringify({
+      sessionId: "8055e2",
+      runId: "plans-page",
+      hypothesisId: "entry",
+      location: "src/app/[gymSlug]/admin/memberships/page.tsx:entry",
+      message: "MembershipsPage entry",
+      data: {
+        gymSlug,
+        userId: user.id ?? null,
+        userRole: user.role ?? null,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion agent log
+
+  let gym;
+  try {
+    gym = await prisma.gym.findUnique({
+      where: { slug: gymSlug },
+      include: {
+        membershipPlans: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+  } catch (err) {
+    // #region agent log
+    fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "8055e2",
+      },
+      body: JSON.stringify({
+        sessionId: "8055e2",
+        runId: "plans-page",
+        hypothesisId: "gym-query-error",
+        location: "src/app/[gymSlug]/admin/memberships/page.tsx:gymQuery",
+        message: "MembershipsPage gym query failed",
+        data: {
+          gymSlug,
+          errorName: (err as any)?.name,
+          errorMessage: (err as any)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log
+    throw err;
+  }
 
   if (!gym) {
     notFound();
@@ -150,35 +288,43 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
     redirect("/login");
   }
 
+  // #region agent log
+  fetch("http://127.0.0.1:7764/ingest/1ebe8111-8eff-4635-8b77-5856a0223279", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "8055e2",
+    },
+    body: JSON.stringify({
+      sessionId: "8055e2",
+      runId: "plans-page",
+      hypothesisId: "loaded",
+      location: "src/app/[gymSlug]/admin/memberships/page.tsx:loaded",
+      message: "MembershipsPage loaded gym and plans",
+      data: {
+        gymId: gym.id,
+        gymSlug,
+        planCount: gym.membershipPlans.length,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion agent log
+
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">{gym.name} · Plans</h1>
-
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white/80">Plans</h2>
-          <MembershipPlanForm
-            gymId={gym.id}
-            gymSlug={gymSlug}
-            action={createPlan}
-          />
-        </div>
-
-        <div className="pt-2 border-t border-white/10">
-          <h3 className="text-xs font-medium text-white/70 mb-2">
-            Existing plans
-          </h3>
-          {gym.membershipPlans.length === 0 ? (
-            <p className="text-sm text-white/60">No plans yet.</p>
-          ) : (
-            <MembershipPlansList
-              gymSlug={gymSlug}
-              plans={gym.membershipPlans}
-              updateAction={updatePlan}
-              deleteAction={deletePlan}
-            />
-          )}
-        </div>
+        <MembershipPlansList
+          gymSlug={gymSlug}
+          gymId={gym.id}
+          plans={gym.membershipPlans}
+          createAction={createPlan}
+          updateAction={updatePlan}
+          deleteAction={deletePlan}
+        />
+        {gym.membershipPlans.length === 0 && (
+          <p className="text-sm text-white/60">No plans yet.</p>
+        )}
       </section>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 type Plan = {
   id: string;
@@ -8,11 +9,18 @@ type Plan = {
   priceCents: number;
   durationDays: number;
   maxCheckInsPerMonth: number | null;
+  billingKind: "SUBSCRIPTION" | "ONE_TIME";
+  billingInterval: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
+  usageKind: "UNLIMITED" | "LIMITED_CREDITS";
+  creditsPerPeriod: number | null;
+  creditsPeriodUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE" | null;
 };
 
 type Props = {
   gymSlug: string;
+  gymId: string;
   plans: Plan[];
+  createAction: (formData: FormData) => void;
   updateAction: (formData: FormData) => void;
   deleteAction: (formData: FormData) => void;
 };
@@ -40,7 +48,9 @@ function classLimitKey(value: number | null): string {
 
 export function MembershipPlansList({
   gymSlug,
+  gymId: _gymId,
   plans,
+  createAction: _createAction,
   updateAction,
   deleteAction,
 }: Props) {
@@ -49,7 +59,7 @@ export function MembershipPlansList({
   const [confirmText, setConfirmText] = useState("");
 
   return (
-    <ul className="space-y-2 text-sm">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
       {plans.map((plan) => {
         const isEditing = editingId === plan.id;
         const isDeleting = deletingId === plan.id;
@@ -60,13 +70,13 @@ export function MembershipPlansList({
           const limitKey = classLimitKey(plan.maxCheckInsPerMonth);
 
           return (
-            <li
+            <div
               key={plan.id}
-              className="border border-white/15 rounded-md p-3 space-y-2"
+              className="border border-white/15 rounded-xl p-4 space-y-2 bg-black/40 min-h-[180px]"
             >
               <form
                 action={updateAction}
-                className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
+                className="grid grid-cols-1 gap-3 items-end"
               >
                 <input type="hidden" name="planId" value={plan.id} />
                 <input type="hidden" name="gymSlug" value={gymSlug} />
@@ -86,43 +96,102 @@ export function MembershipPlansList({
 
                 <div className="flex flex-col gap-1">
                   <label
-                    htmlFor={`duration-${plan.id}`}
+                    htmlFor={`billingKind-${plan.id}`}
                     className="text-xs font-medium"
                   >
-                    Duration
+                    Plan type
                   </label>
                   <select
-                    id={`duration-${plan.id}`}
-                    name="duration"
-                    defaultValue={durationKey}
+                    id={`billingKind-${plan.id}`}
+                    name="billingKind"
+                    defaultValue={plan.billingKind}
                     required
                     className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
                   >
-                    <option value="single_day">Single day</option>
-                    <option value="week">Week</option>
-                    <option value="month">Month</option>
-                    <option value="year">Year</option>
+                    <option value="SUBSCRIPTION">Subscription</option>
+                    <option value="ONE_TIME">Single purchase</option>
                   </select>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <label
-                    htmlFor={`classLimit-${plan.id}`}
+                    htmlFor={`billingInterval-${plan.id}`}
                     className="text-xs font-medium"
                   >
-                    Class limit (per month)
+                    Billing interval
                   </label>
                   <select
-                    id={`classLimit-${plan.id}`}
-                    name="classLimit"
-                    defaultValue={limitKey}
+                    id={`billingInterval-${plan.id}`}
+                    name="billingInterval"
+                    defaultValue={plan.billingInterval ?? "MONTH"}
                     required
                     className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
                   >
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="unlimited">Unlimited</option>
+                    <option value="DAY">Day</option>
+                    <option value="WEEK">Week</option>
+                    <option value="MONTH">Month</option>
+                    <option value="YEAR">Year</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor={`usageKind-${plan.id}`}
+                    className="text-xs font-medium"
+                  >
+                    Usage type
+                  </label>
+                  <select
+                    id={`usageKind-${plan.id}`}
+                    name="usageKind"
+                    defaultValue={plan.usageKind}
+                    required
+                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                  >
+                    <option value="UNLIMITED">Unlimited</option>
+                    <option value="LIMITED_CREDITS">Limited credits</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor={`creditsPerPeriod-${plan.id}`}
+                    className="text-xs font-medium"
+                  >
+                    Credits (if limited)
+                  </label>
+                  <input
+                    id={`creditsPerPeriod-${plan.id}`}
+                    name="creditsPerPeriod"
+                    type="number"
+                    min="1"
+                    defaultValue={
+                      plan.creditsPerPeriod != null
+                        ? String(plan.creditsPerPeriod)
+                        : ""
+                    }
+                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor={`creditsPeriodUnit-${plan.id}`}
+                    className="text-xs font-medium"
+                  >
+                    Credits period
+                  </label>
+                  <select
+                    id={`creditsPeriodUnit-${plan.id}`}
+                    name="creditsPeriodUnit"
+                    defaultValue={plan.creditsPeriodUnit ?? "WEEK"}
+                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                  >
+                    <option value="DAY">Per day</option>
+                    <option value="WEEK">Per week</option>
+                    <option value="MONTH">Per month</option>
+                    <option value="YEAR">Per year</option>
+                    <option value="NONE">Total (no reset)</option>
                   </select>
                 </div>
 
@@ -159,106 +228,133 @@ export function MembershipPlansList({
               >
                 Cancel
               </button>
-            </li>
+
+              {/* Delete controls only available while editing */}
+              {isDeleting ? (
+                <form
+                  action={deleteAction}
+                  className="mt-2 flex flex-col gap-2 text-xs"
+                >
+                  <input type="hidden" name="planId" value={plan.id} />
+                  <input type="hidden" name="gymSlug" value={gymSlug} />
+                  <p className="text-white/70">
+                    Type <span className="font-semibold">delete</span> to confirm removal of this plan.
+                  </p>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      name="confirm"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={confirmText !== "delete"}
+                      className="inline-flex items-center justify-center px-3 py-1 rounded-md bg-red-600 text-[11px] font-medium hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Confirm delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeletingId(null);
+                        setConfirmText("");
+                      }}
+                      className="text-white/60 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeletingId(plan.id);
+                    setConfirmText("");
+                  }}
+                  className="mt-2 text-xs text-red-400 hover:text-red-300"
+                >
+                  Delete plan
+                </button>
+              )}
+            </div>
           );
         }
 
         return (
-          <li
+          <div
             key={plan.id}
-            className="flex flex-col gap-1 border border-white/15 rounded-md p-3"
+            className="flex flex-col gap-2 border border-white/15 rounded-xl p-4 bg-black/40 cursor-pointer min-h-[180px]"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setDeletingId(null);
+              setConfirmText("");
+              setEditingId(plan.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setDeletingId(null);
+                setConfirmText("");
+                setEditingId(plan.id);
+              }
+            }}
           >
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
               <span className="font-medium">{plan.name}</span>
-              <span className="text-xs text-white/60">
-                {(() => {
-                  const price = (plan.priceCents / 100).toFixed(2);
-                  const durationLabel =
-                    plan.durationDays === 1
-                      ? "Single day"
-                      : plan.durationDays === 7
-                      ? "Week"
-                      : plan.durationDays === 30
-                      ? "Month"
-                      : plan.durationDays === 365
-                      ? "Year"
-                      : `${plan.durationDays} days`;
-                  const limitLabel =
-                    plan.maxCheckInsPerMonth == null
-                      ? "Unlimited classes"
-                      : `${plan.maxCheckInsPerMonth} class(es)/month`;
-                  return `${durationLabel} · ${limitLabel} · €${price}`;
-                })()}
-              </span>
             </div>
-            <div className="flex gap-3 text-xs mt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeletingId(null);
-                  setConfirmText("");
-                  setEditingId(plan.id);
-                }}
-                className="text-orange-400 hover:text-orange-300"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setConfirmText("");
-                  setDeletingId(
-                    deletingId === plan.id ? null : plan.id
-                  );
-                }}
-                className="text-red-400 hover:text-red-300"
-              >
-                Delete
-              </button>
+
+            {/* Plan details stacked vertically */}
+            <div className="mt-1 space-y-0.5 text-xs text-white/60">
+              <div>
+                {plan.billingKind === "ONE_TIME"
+                  ? "One-time"
+                  : plan.billingInterval === "DAY"
+                  ? "Daily subscription"
+                  : plan.billingInterval === "WEEK"
+                  ? "Weekly subscription"
+                  : plan.billingInterval === "YEAR"
+                  ? "Yearly subscription"
+                  : "Monthly subscription"}
+              </div>
+              <div>
+                {plan.usageKind === "UNLIMITED"
+                  ? "Unlimited"
+                  : plan.creditsPerPeriod != null &&
+                    plan.creditsPeriodUnit != null
+                  ? (() => {
+                      const unit =
+                        plan.creditsPeriodUnit === "DAY"
+                          ? "day"
+                          : plan.creditsPeriodUnit === "WEEK"
+                          ? "week"
+                          : plan.creditsPeriodUnit === "MONTH"
+                          ? "month"
+                          : plan.creditsPeriodUnit === "YEAR"
+                          ? "year"
+                          : "total";
+                      if (plan.creditsPeriodUnit === "NONE") {
+                        return `${plan.creditsPerPeriod} classes total`;
+                      }
+                      return `${plan.creditsPerPeriod} classes/${unit}`;
+                    })()
+                  : "Limited credits"}
+              </div>
+              <div>€{(plan.priceCents / 100).toFixed(2)}</div>
             </div>
-            {isDeleting && (
-              <form
-                action={deleteAction}
-                className="mt-2 flex flex-col gap-2 text-xs"
-              >
-                <input type="hidden" name="planId" value={plan.id} />
-                <input type="hidden" name="gymSlug" value={gymSlug} />
-                <p className="text-white/70">
-                  Type <span className="font-semibold">delete</span> to
-                  confirm removal of this plan.
-                </p>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    name="confirm"
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={confirmText !== "delete"}
-                    className="inline-flex items-center justify-center px-3 py-1 rounded-md bg-red-600 text-[11px] font-medium hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Confirm delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeletingId(null);
-                      setConfirmText("");
-                    }}
-                    className="text-white/60 hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-          </li>
+          </div>
         );
       })}
-    </ul>
+
+      <Link
+        href={`/${gymSlug}/admin/plans/new`}
+        className="flex flex-col items-center justify-center border border-transparent rounded-xl p-4 bg-orange-600 text-black hover:bg-orange-500 transition-colors text-sm font-semibold text-center min-h-[180px]"
+      >
+        Create plan
+      </Link>
+    </div>
   );
 }

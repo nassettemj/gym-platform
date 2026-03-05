@@ -6,12 +6,22 @@ type Props = {
   gymId: string;
   gymSlug: string;
   action: (formData: FormData) => void;
+  forceOpen?: boolean;
+  onClose?: () => void;
 };
 
-export function MembershipPlanForm({ gymId, gymSlug, action }: Props) {
+export function MembershipPlanForm({
+  gymId,
+  gymSlug,
+  action,
+  forceOpen,
+  onClose,
+}: Props) {
   const [open, setOpen] = useState(false);
 
-  if (!open) {
+  const isOpen = forceOpen ?? open;
+
+  if (!isOpen) {
     return (
       <button
         type="button"
@@ -27,7 +37,7 @@ export function MembershipPlanForm({ gymId, gymSlug, action }: Props) {
     <div className="space-y-3">
       <form
         action={action}
-        className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
+        className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
       >
         <input type="hidden" name="gymId" value={gymId} />
         <input type="hidden" name="gymSlug" value={gymSlug} />
@@ -46,38 +56,84 @@ export function MembershipPlanForm({ gymId, gymSlug, action }: Props) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="duration" className="text-xs font-medium">
-            Duration
+          <label htmlFor="billingKind" className="text-xs font-medium">
+            Plan type
           </label>
           <select
-            id="duration"
-            name="duration"
+            id="billingKind"
+            name="billingKind"
             required
             className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="month"
+            defaultValue="SUBSCRIPTION"
           >
-            <option value="single_day">Single day</option>
-            <option value="week">Week</option>
-            <option value="month">Month</option>
-            <option value="year">Year</option>
+            <option value="SUBSCRIPTION">Subscription</option>
+            <option value="ONE_TIME">Single purchase</option>
           </select>
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="classLimit" className="text-xs font-medium">
-            Class limit (per month)
+          <label htmlFor="billingInterval" className="text-xs font-medium">
+            Billing interval
           </label>
           <select
-            id="classLimit"
-            name="classLimit"
+            id="billingInterval"
+            name="billingInterval"
             required
             className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="unlimited"
+            defaultValue="MONTH"
           >
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="unlimited">Unlimited</option>
+            <option value="DAY">Day</option>
+            <option value="WEEK">Week</option>
+            <option value="MONTH">Month</option>
+            <option value="YEAR">Year</option>
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="usageKind" className="text-xs font-medium">
+            Usage type
+          </label>
+          <select
+            id="usageKind"
+            name="usageKind"
+            required
+            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+            defaultValue="UNLIMITED"
+          >
+            <option value="UNLIMITED">Unlimited</option>
+            <option value="LIMITED_CREDITS">Limited credits</option>
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="creditsPerPeriod" className="text-xs font-medium">
+            Credits (if limited)
+          </label>
+          <input
+            id="creditsPerPeriod"
+            name="creditsPerPeriod"
+            type="number"
+            min="1"
+            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+            placeholder="e.g. 3"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="creditsPeriodUnit" className="text-xs font-medium">
+            Credits period
+          </label>
+          <select
+            id="creditsPeriodUnit"
+            name="creditsPeriodUnit"
+            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+            defaultValue="WEEK"
+          >
+            <option value="DAY">Per day</option>
+            <option value="WEEK">Per week</option>
+            <option value="MONTH">Per month</option>
+            <option value="YEAR">Per year</option>
+            <option value="NONE">Total (no reset)</option>
           </select>
         </div>
 
@@ -107,7 +163,13 @@ export function MembershipPlanForm({ gymId, gymSlug, action }: Props) {
 
       <button
         type="button"
-        onClick={() => setOpen(false)}
+        onClick={() => {
+          if (forceOpen && onClose) {
+            onClose();
+          } else {
+            setOpen(false);
+          }
+        }}
         className="text-xs text-white/60 hover:text-white"
       >
         Cancel

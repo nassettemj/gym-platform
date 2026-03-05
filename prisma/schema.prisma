@@ -128,6 +128,22 @@ model MembershipPlan {
   priceCents          Int
   durationDays        Int
   maxCheckInsPerMonth Int?
+  /// Billing model for this plan (e.g. subscription vs one-time).
+  billingKind         PlanBillingKind @default(SUBSCRIPTION)
+  /// Billing interval for subscriptions (maps to Stripe recurring.interval).
+  billingInterval     BillingInterval?
+  /// Interval count for subscriptions (maps to Stripe recurring.interval_count).
+  intervalCount       Int?
+  /// Usage model: unlimited vs limited credits.
+  usageKind           PlanUsageKind   @default(UNLIMITED)
+  /// Number of credits/classes allowed in a given usage window.
+  creditsPerPeriod    Int?
+  /// Unit over which creditsPerPeriod is measured (day/week/month/year/none).
+  creditsPeriodUnit   CreditInterval?
+  /// Stripe Product representing this plan.
+  stripeProductId     String?
+  /// Default Stripe Price for this plan.
+  stripePriceId       String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   gym                 Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
@@ -339,10 +355,38 @@ enum SubscriptionStatus {
   PAUSED
 }
 
+enum PlanBillingKind {
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+enum BillingInterval {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+enum PlanUsageKind {
+  UNLIMITED
+  LIMITED_CREDITS
+}
+
+enum CreditInterval {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+  NONE
+}
+
 enum ClassMainCategory {
   OPEN_MAT
   GI
   NO_GI
+  EVENT
+  SEMINAR
+  GRADUATION
 }
 
 enum ClassSubCategory {
