@@ -12,6 +12,8 @@ interface LoginFormProps {
   gyms: Gym[];
 }
 
+const enableDevLogin = process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === "true";
+
 export function LoginForm({ gyms }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLocalhost, setIsLocalhost] = useState(false);
@@ -21,6 +23,8 @@ export function LoginForm({ gyms }: LoginFormProps) {
       typeof window !== "undefined" && window.location?.hostname === "localhost"
     );
   }, []);
+
+  const showDevTools = isLocalhost || enableDevLogin;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,7 +37,7 @@ export function LoginForm({ gyms }: LoginFormProps) {
     const devRole = String(formData.get("devRole") ?? "admin").trim();
 
     // Dev-only: empty form → quick login as selected gym admin, instructor, or member
-    if (isLocalhost && !email && !password && devGymSlug) {
+    if (showDevTools && !email && !password && devGymSlug) {
       email =
         devRole === "member"
           ? "__dev_member__"
@@ -41,7 +45,7 @@ export function LoginForm({ gyms }: LoginFormProps) {
             ? "__dev_instructor__"
             : "__dev_admin__";
       password = "__dev__";
-    } else if (isLocalhost && email.toLowerCase() === "sup") {
+    } else if (showDevTools && email.toLowerCase() === "sup") {
       password = password || "__dev__";
     }
 
@@ -78,7 +82,7 @@ export function LoginForm({ gyms }: LoginFormProps) {
         </p>
       )}
 
-      {isLocalhost && gyms.length > 0 && (
+      {showDevTools && gyms.length > 0 && (
         <div className="space-y-3 pb-3 border-b border-white/10">
           <p className="text-xs font-medium text-white/70">Quick login (dev)</p>
           <div className="flex gap-2">

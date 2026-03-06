@@ -20,11 +20,13 @@ export function GymLoginForm({ gymSlug }: GymLoginFormProps) {
     let password = String(formData.get("password") ?? "").trim();
 
     // Dev-only: empty form → random member of this gym
-    if (typeof window !== "undefined" && window.location?.hostname === "localhost") {
-      if (!email && !password) {
-        email = "__dev_random_member__";
-        password = "__dev__";
-      }
+    const devAllowed =
+      typeof window !== "undefined" &&
+      (window.location?.hostname === "localhost" ||
+        process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === "true");
+    if (devAllowed && !email && !password) {
+      email = "__dev_random_member__";
+      password = "__dev__";
     }
 
     if (!email || !password) return;

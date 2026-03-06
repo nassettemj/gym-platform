@@ -18,8 +18,8 @@ export const authOptions: NextAuthOptions = {
         const password = String(credentials?.password ?? "");
         const gymSlug = String((credentials as any).gymSlug ?? "").trim();
 
-        // Dev-only: quick login for localhost testing (NODE_ENV=development)
-        if (process.env.NODE_ENV === "development") {
+        // Dev-only: quick login when ENABLE_DEV_LOGIN is set (e.g. Vercel preview)
+        if (process.env.ENABLE_DEV_LOGIN === "true") {
           if (email.toLowerCase() === "sup") {
             const platformAdmin = await prisma.user.findFirst({
               where: { role: "PLATFORM_ADMIN" },
