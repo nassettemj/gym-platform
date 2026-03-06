@@ -1,8 +1,17 @@
 import { prisma } from "@/lib/prisma";
+import type { ClassAge } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { ScheduleView } from "@/components/ScheduleView";
 import type { BulkClassUpdatePayload } from "@/lib/scheduleBulkTypes";
+
+const VALID_CLASS_AGES = ["ALL_AGES", "ADULT_17_PLUS", "AGE_4_6", "AGE_7_10", "AGE_11_15"] as const;
+const GUESTS_INSTRUCTOR_VALUE = "__guests__";
+
+function parseAge(value: string): ClassAge | null {
+  if (!value || !VALID_CLASS_AGES.includes(value as any)) return null;
+  return value as ClassAge;
+}
 
 interface SchedulePageProps {
   params: Promise<{
@@ -23,9 +32,17 @@ export async function createClass(formData: FormData) {
   if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
-  const locationId = String(formData.get("locationId") ?? "");
+  const locationIdRaw = String(formData.get("locationId") ?? "").trim();
+  const locationId = locationIdRaw || null;
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
-  const instructorId = instructorIdRaw || null;
+  const guestNamesRaw = formData.getAll("guestNames") as string[];
+  const guestNames = guestNamesRaw.map((s) => s.trim()).filter(Boolean);
+  const isGuests = instructorIdRaw === GUESTS_INSTRUCTOR_VALUE;
+  const instructorId = isGuests ? null : instructorIdRaw || null;
+  if (isGuests && guestNames.length === 0) return;
+  const topic = isGuests
+    ? String(formData.get("topic") ?? "").trim() || null
+    : null;
   const name = String(formData.get("name") ?? "").trim();
   const mainCategory = String(formData.get("mainCategory") ?? "") || null;
   const subCategory = String(formData.get("subCategory") ?? "") || null;
@@ -34,10 +51,7 @@ export async function createClass(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? "60");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
-  const minAgeRaw = String(formData.get("minAgeYears") ?? "").trim();
-  const maxAgeRaw = String(formData.get("maxAgeYears") ?? "").trim();
-  const minAgeYears = minAgeRaw ? Number(minAgeRaw) : null;
-  const maxAgeYears = maxAgeRaw ? Number(maxAgeRaw) : null;
+  const age = parseAge(String(formData.get("age") ?? "").trim());
   const isRecurring =
     String(formData.get("isRecurring") ?? "").toLowerCase() === "on";
   const repeatDaysRaw = formData.getAll("repeatDays") as string[];
@@ -48,9 +62,16 @@ export async function createClass(formData: FormData) {
       ? viewModeRaw
       : "week";
 
+  const gym = await prisma.gym.findUnique({
+    where: { id: gymId },
+    include: { locations: true },
+  });
+  if (!gym) return;
+  const hasLocations = gym.locations.length > 0;
+  if (hasLocations && !locationId) return;
+
   if (
     !gymId ||
-    !locationId ||
     !dateStr ||
     !timeStr ||
     !durationMinutes ||
@@ -70,27 +91,26 @@ export async function createClass(formData: FormData) {
     .slice(11, 16); // HH:MM
 
   const occurrences: {
-    locationId: string;
+    gymId: string;
+    locationId: string | null;
     name: string;
     dayOfWeek: number;
     startTime: string;
     endTime: string;
     capacity: number | null;
     instructorId: string | null;
+    guestNames: string[];
+    topic: string | null;
     startAt: Date;
     endAt: Date;
     mainCategory: any;
     subCategory: any;
-    minAgeYears: number | null;
-    maxAgeYears: number | null;
+    age: ClassAge | null;
   }[] = [];
-
-  if (minAgeYears != null && maxAgeYears != null && minAgeYears > maxAgeYears) {
-    return;
-  }
 
   // Base occurrence from the primary date/time/duration
   occurrences.push({
+    gymId,
     locationId,
     name: name || "Class",
     dayOfWeek,
@@ -98,12 +118,13 @@ export async function createClass(formData: FormData) {
     endTime,
     capacity,
     instructorId,
+    guestNames: isGuests ? guestNames : [],
+    topic,
     startAt,
     endAt,
     mainCategory: mainCategory ? (mainCategory as any) : null,
     subCategory: subCategory ? (subCategory as any) : null,
-    minAgeYears,
-    maxAgeYears,
+    age,
   });
 
   if (
@@ -164,6 +185,7 @@ export async function createClass(formData: FormData) {
           .slice(11, 16);
 
         occurrences.push({
+          gymId,
           locationId,
           name: name || "Class",
           dayOfWeek: repeatDayOfWeek,
@@ -171,12 +193,13 @@ export async function createClass(formData: FormData) {
           endTime: repeatEndTime,
           capacity,
           instructorId,
+          guestNames: isGuests ? guestNames : [],
+          topic,
           startAt: candidateStart,
           endAt: candidateEnd,
           mainCategory: mainCategory ? (mainCategory as any) : null,
           subCategory: subCategory ? (subCategory as any) : null,
-          minAgeYears,
-          maxAgeYears,
+          age,
         });
       }
 
@@ -210,9 +233,17 @@ async function updateClass(formData: FormData) {
   const user = session?.user as any;
   if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const classId = String(formData.get("classId") ?? "");
-  const locationId = String(formData.get("locationId") ?? "");
+  const locationIdRaw = String(formData.get("locationId") ?? "").trim();
+  const locationId = locationIdRaw || null;
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
-  const instructorId = instructorIdRaw || null;
+  const guestNamesRaw = formData.getAll("guestNames") as string[];
+  const guestNames = guestNamesRaw.map((s) => s.trim()).filter(Boolean);
+  const isGuests = instructorIdRaw === GUESTS_INSTRUCTOR_VALUE;
+  const instructorId = isGuests ? null : instructorIdRaw || null;
+  if (isGuests && guestNames.length === 0) return;
+  const topic = isGuests
+    ? String(formData.get("topic") ?? "").trim() || null
+    : null;
   const name = String(formData.get("name") ?? "").trim();
   const mainCategory = String(formData.get("mainCategory") ?? "") || null;
   const subCategory = String(formData.get("subCategory") ?? "") || null;
@@ -221,23 +252,24 @@ async function updateClass(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes") ?? "60");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
-  const minAgeRaw = String(formData.get("minAgeYears") ?? "").trim();
-  const maxAgeRaw = String(formData.get("maxAgeYears") ?? "").trim();
-  const minAgeYears = minAgeRaw ? Number(minAgeRaw) : null;
-  const maxAgeYears = maxAgeRaw ? Number(maxAgeRaw) : null;
+  const age = parseAge(String(formData.get("age") ?? "").trim());
   const viewModeRaw = String(formData.get("viewMode") ?? "week");
   const viewMode =
     viewModeRaw === "day" || viewModeRaw === "week" || viewModeRaw === "month"
       ? viewModeRaw
       : "week";
 
-  if (!classId || !locationId || !dateStr || !timeStr || !durationMinutes) {
+  if (!classId || !dateStr || !timeStr || !durationMinutes) {
     return;
   }
 
-  if (minAgeYears != null && maxAgeYears != null && minAgeYears > maxAgeYears) {
-    return;
-  }
+  const existing = await prisma.class.findUnique({
+    where: { id: classId },
+    include: { gym: { include: { locations: true } } },
+  });
+  if (!existing) return;
+  const hasLocations = existing.gym.locations.length > 0;
+  if (hasLocations && !locationId) return;
 
   const startAt = new Date(`${dateStr}T${timeStr}:00`);
   const endAt = new Date(startAt.getTime() + durationMinutes * 60 * 1000);
@@ -257,12 +289,13 @@ async function updateClass(formData: FormData) {
         endTime,
         capacity: capacity ?? undefined,
         instructorId: instructorId ?? undefined,
+        guestNames: isGuests ? guestNames : [],
+        topic: topic ?? undefined,
         startAt,
         endAt,
         mainCategory: mainCategory ? (mainCategory as any) : null,
         subCategory: subCategory ? (subCategory as any) : null,
-        minAgeYears: minAgeYears ?? undefined,
-        maxAgeYears: maxAgeYears ?? undefined,
+        age: age ?? undefined,
       },
     });
   } catch (error: any) {
@@ -314,16 +347,17 @@ export async function bulkUpdateClasses(formData: FormData) {
     redirect(`/${gymSlug}/admin/schedule`);
   }
 
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+  });
+  if (!gym) redirect(`/${gymSlug}/admin/schedule`);
+
   await prisma.$transaction(async (tx) => {
     if (payload.operation === "delete") {
       await tx.class.deleteMany({
         where: {
           id: { in: payload.classIds },
-          location: {
-            gym: {
-              slug: gymSlug,
-            },
-          },
+          gymId: gym.id,
         },
       });
       return;
@@ -332,16 +366,7 @@ export async function bulkUpdateClasses(formData: FormData) {
     const classes = await tx.class.findMany({
       where: {
         id: { in: payload.classIds },
-        location: {
-          gym: {
-            slug: gymSlug,
-          },
-        },
-      },
-      include: {
-        location: {
-          select: { gymId: true },
-        },
+        gymId: gym.id,
       },
     });
 
@@ -392,19 +417,25 @@ export async function bulkCreateOnDates(formData: FormData) {
   if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const datesJson = String(formData.get("datesJson") ?? "[]");
   const name = String(formData.get("name") ?? "").trim();
-  const locationId = String(formData.get("locationId") ?? "");
+  const gymId = String(formData.get("gymId") ?? "");
+  const locationIdRaw = String(formData.get("locationId") ?? "").trim();
+  const locationId = locationIdRaw || null;
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
-  const instructorId = instructorIdRaw || null;
+  const guestNamesRaw = formData.getAll("guestNames") as string[];
+  const guestNames = guestNamesRaw.map((s) => s.trim()).filter(Boolean);
+  const isGuests = instructorIdRaw === GUESTS_INSTRUCTOR_VALUE;
+  const instructorId = isGuests ? null : instructorIdRaw || null;
+  if (isGuests && guestNames.length === 0) redirect(`/${gymSlug}/admin/schedule`);
+  const topic = isGuests
+    ? String(formData.get("topic") ?? "").trim() || null
+    : null;
   const timeStr = String(formData.get("time") ?? "").trim();
   const durationMinutes = Number(formData.get("durationMinutes") ?? "60");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
   const mainCategory = String(formData.get("mainCategory") ?? "") || null;
   const subCategory = String(formData.get("subCategory") ?? "") || null;
-  const minAgeRaw = String(formData.get("minAgeYears") ?? "").trim();
-  const maxAgeRaw = String(formData.get("maxAgeYears") ?? "").trim();
-  const minAgeYears = minAgeRaw ? Number(minAgeRaw) : null;
-  const maxAgeYears = maxAgeRaw ? Number(maxAgeRaw) : null;
+  const age = parseAge(String(formData.get("age") ?? "").trim());
 
   let dateKeys: string[] = [];
   try {
@@ -413,18 +444,22 @@ export async function bulkCreateOnDates(formData: FormData) {
     dateKeys = [];
   }
 
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    include: { locations: true },
+  });
+  if (!gym) redirect(`/${gymSlug}/admin/schedule`);
+  const hasLocations = gym.locations.length > 0;
+  if (hasLocations && !locationId) redirect(`/${gymSlug}/admin/schedule`);
+
   if (
-    !locationId ||
+    !gymId ||
     !timeStr ||
     !durationMinutes ||
     !dateKeys.length ||
     !capacityRaw ||
     !mainCategory
   ) {
-    redirect(`/${gymSlug}/admin/schedule`);
-  }
-
-  if (minAgeYears != null && maxAgeYears != null && minAgeYears > maxAgeYears) {
     redirect(`/${gymSlug}/admin/schedule`);
   }
 
@@ -436,6 +471,7 @@ export async function bulkCreateOnDates(formData: FormData) {
     const endTime = new Date(endAt.getTime()).toISOString().slice(11, 16);
 
     return {
+      gymId,
       locationId,
       name: name || "Class",
       dayOfWeek,
@@ -443,12 +479,13 @@ export async function bulkCreateOnDates(formData: FormData) {
       endTime,
       capacity,
       instructorId,
+      guestNames: isGuests ? guestNames : [],
+      topic,
       startAt,
       endAt,
       mainCategory: mainCategory ? (mainCategory as any) : null,
       subCategory: subCategory ? (subCategory as any) : null,
-      minAgeYears,
-      maxAgeYears,
+      age,
     };
   });
 
@@ -501,9 +538,7 @@ export default async function SchedulePage({
 
   const classes = await prisma.class.findMany({
     where: {
-      location: {
-        gymId: gym.id,
-      },
+      gymId: gym.id,
       OR: [
         { startAt: { gte: startWindow, lte: endWindow } },
         { startAt: null },
@@ -533,12 +568,17 @@ export default async function SchedulePage({
     name: c.name,
     startAt: c.startAt?.toISOString() ?? "",
     endAt: c.endAt?.toISOString() ?? "",
-    locationName: c.location.name,
-    instructorName: c.instructor?.name ?? "",
+    locationName: c.location?.name ?? "",
+    instructorName:
+      c.instructor?.name ??
+      (c.guestNames?.length
+        ? `Guests: ${c.guestNames.join(", ")}`
+        : ""),
+    guestNames: c.guestNames ?? [],
+    topic: c.topic ?? null,
     mainCategory: c.mainCategory ?? null,
     subCategory: c.subCategory ?? null,
-    minAgeYears: c.minAgeYears ?? null,
-    maxAgeYears: c.maxAgeYears ?? null,
+    age: c.age ?? null,
   }));
 
   const initialViewRaw = search?.view ?? "week";

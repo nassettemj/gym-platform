@@ -6,11 +6,10 @@ type Plan = {
   id: string;
   name: string;
   priceCents: number;
-  billingKind: "SUBSCRIPTION" | "ONE_TIME";
-  billingInterval: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
-  usageKind: "UNLIMITED" | "LIMITED_CREDITS";
-  creditsPerPeriod: number | null;
-  creditsPeriodUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE" | null;
+  billingKind: "SUBSCRIPTION" | "PASS";
+  duration: "ONE_MONTH" | "ONE_YEAR";
+  age: "ADULTS" | "KIDS_AND_JUNIORS";
+  visits: "ONE_VISIT" | "TEN_VISITS" | null;
 };
 
 type Props = {
@@ -71,38 +70,14 @@ export function MemberPlanChooser({
 
               <div className="mt-1 space-y-0.5 text-[11px] text-white/60">
                 <div>
-                  {plan.billingKind === "ONE_TIME"
-                    ? "One-time"
-                    : plan.billingInterval === "DAY"
-                    ? "Daily subscription"
-                    : plan.billingInterval === "WEEK"
-                    ? "Weekly subscription"
-                    : plan.billingInterval === "YEAR"
-                    ? "Yearly subscription"
-                    : "Monthly subscription"}
+                  {plan.billingKind === "PASS" ? "Pass" : "Subscription"}
                 </div>
                 <div>
-                  {plan.usageKind === "UNLIMITED"
-                    ? "Unlimited"
-                    : plan.creditsPerPeriod != null &&
-                      plan.creditsPeriodUnit != null
-                    ? (() => {
-                        const unit =
-                          plan.creditsPeriodUnit === "DAY"
-                            ? "day"
-                            : plan.creditsPeriodUnit === "WEEK"
-                            ? "week"
-                            : plan.creditsPeriodUnit === "MONTH"
-                            ? "month"
-                            : plan.creditsPeriodUnit === "YEAR"
-                            ? "year"
-                            : "total";
-                        if (plan.creditsPeriodUnit === "NONE") {
-                          return `${plan.creditsPerPeriod} classes total`;
-                        }
-                        return `${plan.creditsPerPeriod} classes/${unit}`;
-                      })()
-                    : "Limited credits"}
+                  {plan.billingKind === "PASS"
+                    ? plan.visits === "TEN_VISITS"
+                      ? "10 visits"
+                      : "1 visit"
+                    : `${plan.duration === "ONE_YEAR" ? "1 year" : "1 month"} · ${plan.age === "KIDS_AND_JUNIORS" ? "Kids & Juniors" : "Adults"}`}
                 </div>
                 <div>€{(plan.priceCents / 100).toFixed(2)}</div>
               </div>

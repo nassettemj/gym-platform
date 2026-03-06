@@ -37,6 +37,30 @@ export default async function PostLoginPage() {
   }
 
   if (gymSlug) {
+    if (user.memberId) {
+      const member = await prisma.member.findFirst({
+        where: { id: user.memberId },
+        include: {
+          subscriptions: {
+            where: { status: "ACTIVE" },
+            include: { plan: true },
+          },
+        },
+      });
+      const now = new Date();
+      const hasActiveSubscription =
+        member?.subscriptions?.some(
+          (s) => s.startsAt <= now && s.endsAt > now
+        ) ?? false;
+      const isStaff =
+        ["GYM_ADMIN", "STAFF", "INSTRUCTOR", "LOCATION_ADMIN"].includes(
+          user.role ?? ""
+        );
+      if (hasActiveSubscription || isStaff) {
+        redirect(`/${gymSlug}/admin/my-schedule`);
+      }
+    }
+
     if (user.role === "MEMBER" && user.memberId) {
       redirect(`/${gymSlug}/admin/members/${user.memberId}`);
     }

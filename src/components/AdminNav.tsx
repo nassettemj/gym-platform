@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { roleAtLeast } from "@/lib/roles";
 
 export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) {
   const [open, setOpen] = useState(false);
@@ -57,8 +58,17 @@ export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) 
               Plans
             </Link>
           )}
+          {roleAtLeast(role as any, "LOCATION_ADMIN") && (
+            <Link
+              href={`/${gymSlug}/admin/schedule`}
+              className="block px-3 py-2 hover:bg-white/10"
+              onClick={() => setOpen(false)}
+            >
+              Planning
+            </Link>
+          )}
           <Link
-            href={`/${gymSlug}/admin/schedule`}
+            href={`/${gymSlug}/admin/my-schedule`}
             className="block px-3 py-2 hover:bg-white/10"
             onClick={() => setOpen(false)}
           >

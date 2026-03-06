@@ -16,6 +16,7 @@ model Gym {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   stripeCustomerId String?
+  classes          Class[]
   events           Event[]
   customizations   GymCustomization?
   instructors      Instructor[]
@@ -130,18 +131,14 @@ model MembershipPlan {
   priceCents          Int
   durationDays        Int
   maxCheckInsPerMonth Int?
-  /// Billing model for this plan (e.g. subscription vs one-time).
+  /// Billing model for this plan (subscription vs pass).
   billingKind         PlanBillingKind @default(SUBSCRIPTION)
-  /// Billing interval for subscriptions (maps to Stripe recurring.interval).
-  billingInterval     BillingInterval?
-  /// Interval count for subscriptions (maps to Stripe recurring.interval_count).
-  intervalCount       Int?
-  /// Usage model: unlimited vs limited credits.
-  usageKind           PlanUsageKind   @default(UNLIMITED)
-  /// Number of credits/classes allowed in a given usage window.
-  creditsPerPeriod    Int?
-  /// Unit over which creditsPerPeriod is measured (day/week/month/year/none).
-  creditsPeriodUnit   CreditInterval?
+  /// Duration of the plan (1 month or 1 year).
+  duration            PlanDuration    @default(ONE_MONTH)
+  /// Age group: Adults or Kids & Juniors (subscriptions only).
+  age                 PlanAge         @default(ADULTS)
+  /// Number of visits for pass plans (1 or 10). Null for subscriptions.
+  visits              PlanVisits?
   /// Stripe Product representing this plan.
   stripeProductId     String?
   /// Default Stripe Price for this plan.
@@ -173,16 +170,21 @@ model Subscription {
 /// Recurring class entry (e.g. Mon/Wed BJJ 18:00).
 model Class {
   id           String             @id @default(cuid())
-  locationId   String
+  gymId        String
+  locationId   String?
   name         String
   discipline   String?
   dayOfWeek    Int
   startTime    String
   endTime      String
   capacity     Int?
-  minAgeYears  Int?
-  maxAgeYears  Int?
+  /// Age group for the class (17+, 4-6, 7-10, 11-15 years). Null = no restriction.
+  age          ClassAge?
   instructorId String?
+  /// Guest instructor names when instructorId is null (e.g. "Guests" selected).
+  guestNames   String[]            @default([])
+  /// Topic for guest-taught classes (e.g. seminar subject).
+  topic        String?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   endAt        DateTime?
@@ -190,9 +192,12 @@ model Class {
   /// Concrete instance timing for calendar and history.
   startAt      DateTime?
   subCategory  ClassSubCategory?
+  /// When the instructor confirmed taking attendance.
+  attendanceConfirmedAt DateTime?
   checkIns     CheckIn[]
+  gym          Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
   instructor   Instructor?        @relation(fields: [instructorId], references: [id])
-  location     Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location     Location?          @relation(fields: [locationId], references: [id], onDelete: Cascade)
 }
 
 /// Instructor profile, optionally linked to a Member.
@@ -211,13 +216,15 @@ model Instructor {
 
 /// Check-in event for attendance tracking.
 model CheckIn {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   memberId   String
-  locationId String
+  locationId String?
   classId    String?
-  checkedAt  DateTime @default(now())
-  class      Class?   @relation(fields: [classId], references: [id])
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  checkedAt  DateTime  @default(now())
+  /// Set when instructor marks member as attended.
+  attended   Boolean   @default(false)
+  class      Class?    @relation(fields: [classId], references: [id])
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
   member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 }
 
@@ -360,27 +367,30 @@ enum SubscriptionStatus {
 
 enum PlanBillingKind {
   SUBSCRIPTION
-  ONE_TIME
+  PASS
 }
 
-enum BillingInterval {
-  DAY
-  WEEK
-  MONTH
-  YEAR
+enum PlanDuration {
+  ONE_MONTH
+  ONE_YEAR
 }
 
-enum PlanUsageKind {
-  UNLIMITED
-  LIMITED_CREDITS
+enum PlanAge {
+  ADULTS
+  KIDS_AND_JUNIORS
 }
 
-enum CreditInterval {
-  DAY
-  WEEK
-  MONTH
-  YEAR
-  NONE
+enum PlanVisits {
+  ONE_VISIT
+  TEN_VISITS
+}
+
+enum ClassAge {
+  ALL_AGES
+  ADULT_17_PLUS
+  AGE_4_6
+  AGE_7_10
+  AGE_11_15
 }
 
 enum ClassMainCategory {

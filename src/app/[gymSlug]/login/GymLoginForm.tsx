@@ -16,8 +16,16 @@ export function GymLoginForm({ gymSlug }: GymLoginFormProps) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const email = String(formData.get("email") ?? "").trim();
-    const password = String(formData.get("password") ?? "").trim();
+    let email = String(formData.get("email") ?? "").trim();
+    let password = String(formData.get("password") ?? "").trim();
+
+    // Dev-only: empty form → random member of this gym
+    if (typeof window !== "undefined" && window.location?.hostname === "localhost") {
+      if (!email && !password) {
+        email = "__dev_random_member__";
+        password = "__dev__";
+      }
+    }
 
     if (!email || !password) return;
 
@@ -54,7 +62,7 @@ export function GymLoginForm({ gymSlug }: GymLoginFormProps) {
           id="email"
           name="email"
           type="email"
-          required
+          placeholder="Empty + Login = random member (dev)"
           className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
         />
       </div>
@@ -66,7 +74,7 @@ export function GymLoginForm({ gymSlug }: GymLoginFormProps) {
           id="password"
           name="password"
           type="password"
-          required
+          placeholder="Password"
           className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
         />
       </div>

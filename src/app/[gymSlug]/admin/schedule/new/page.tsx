@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClass } from "../page";
+import { InstructorGuestSelector } from "@/components/InstructorGuestSelector";
 
 interface NewSchedulePageProps {
   params: Promise<{
@@ -74,11 +75,11 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
             <select
               id="locationId"
               name="locationId"
-              required
+              required={locationsForSelect.length > 0}
               className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
             >
-              <option value="" disabled>
-                Select location
+              <option value="">
+                {locationsForSelect.length === 0 ? "—" : "Select location"}
               </option>
               {locationsForSelect.map((loc) => (
                 <option key={loc.id} value={loc.id}>
@@ -88,24 +89,11 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
             </select>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor="instructorId" className="text-xs font-medium">
-              Instructor
-            </label>
-            <select
-              id="instructorId"
-              name="instructorId"
-              className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-              defaultValue=""
-            >
-              <option value="">Unassigned</option>
-              {instructorsForSelect.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <InstructorGuestSelector
+            instructors={instructorsForSelect}
+            size="md"
+            selectId="instructorId"
+          />
 
           <div className="flex flex-col gap-1">
             <label htmlFor="mainCategory" className="text-xs font-medium">
@@ -166,29 +154,21 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="minAgeYears" className="text-xs font-medium">
-              Min age (optional)
+            <label htmlFor="age" className="text-xs font-medium">
+              Age (optional)
             </label>
-            <input
-              id="minAgeYears"
-              name="minAgeYears"
-              type="number"
-              min={0}
+            <select
+              id="age"
+              name="age"
               className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label htmlFor="maxAgeYears" className="text-xs font-medium">
-              Max age (optional)
-            </label>
-            <input
-              id="maxAgeYears"
-              name="maxAgeYears"
-              type="number"
-              min={0}
-              className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            />
+            >
+              <option value="">No restriction</option>
+              <option value="ALL_AGES">All ages</option>
+              <option value="ADULT_17_PLUS">17+</option>
+              <option value="AGE_4_6">4-6 years</option>
+              <option value="AGE_7_10">7-10 years</option>
+              <option value="AGE_11_15">11-15 years</option>
+            </select>
           </div>
 
           <div className="flex flex-col gap-1">

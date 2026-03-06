@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { InstructorGuestSelector } from "./InstructorGuestSelector";
 
 type LocationOption = {
   id: string;
@@ -20,10 +22,11 @@ type ClassItem = {
   endAt: string;
   locationName: string;
   instructorName: string;
+  guestNames: string[];
+  topic: string | null;
   mainCategory: string | null;
   subCategory: string | null;
-  minAgeYears: number | null;
-  maxAgeYears: number | null;
+  age: "ALL_AGES" | "ADULT_17_PLUS" | "AGE_4_6" | "AGE_7_10" | "AGE_11_15" | null;
 };
 
 type Props = {
@@ -79,6 +82,18 @@ function toLocalTimeInput(iso: string | null | undefined): string {
   return `${hours}:${minutes}`;
 }
 
+function formatAge(age: ClassItem["age"]): string {
+  if (!age) return "";
+  const labels: Record<string, string> = {
+    ALL_AGES: "All ages",
+    ADULT_17_PLUS: "17+",
+    AGE_4_6: "4-6 y",
+    AGE_7_10: "7-10 y",
+    AGE_11_15: "11-15 y",
+  };
+  return labels[age] ?? age.replace("_", " ");
+}
+
 export function ScheduleView({
   gymId,
   gymSlug,
@@ -92,6 +107,7 @@ export function ScheduleView({
   initialViewMode,
   bulkCreateOnDatesAction,
 }: Props) {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>(
     initialViewMode ?? "week",
   );
@@ -290,8 +306,7 @@ export function ScheduleView({
       clearSelection();
     }
 
-    setSelectedClass(classItem);
-    setIsEditing(false);
+    router.push(`/${gymSlug}/admin/schedule/${classItem.id}`);
     setLastFocusedClassId(classItem.id);
   };
 
@@ -369,11 +384,11 @@ export function ScheduleView({
         if (start < startOfMonth || start > endOfMonth) return false;
       }
 
-      // Instructor filter: all / none / specific
+      // Instructor filter: all / none / guests / specific
       if (selectedInstructor === "none") {
-        if (c.instructorName) {
-          return false;
-        }
+        if (c.instructorName) return false;
+      } else if (selectedInstructor === "guests") {
+        if (!c.instructorName.startsWith("Guests:")) return false;
       } else if (selectedInstructor !== "all") {
         const selectedInst = instructors.find(
           (i) => i.id === selectedInstructor,
@@ -634,7 +649,8 @@ export function ScheduleView({
             className="px-2 py-1 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             <option value="all">All instructors</option>
-          <option value="none">None</option>
+            <option value="none">None</option>
+            <option value="guests">Guests</option>
             {instructors.map((inst) => (
               <option key={inst.id} value={inst.id}>
                 {inst.name}
@@ -761,6 +777,11 @@ export function ScheduleView({
                                 {c.subCategory.replace("_", " ")}
                               </span>
                             )}
+                            {c.age && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px]">
+                                {formatAge(c.age)}
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/70">
                             <span>{c.locationName}</span>
@@ -876,6 +897,11 @@ export function ScheduleView({
                               {c.mainCategory.replace("_", " ")}
                             </span>
                           )}
+                          {c.age && (
+                            <span className="px-1 py-0.5 rounded-full bg-white/10 text-[9px]">
+                              {formatAge(c.age)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -981,6 +1007,11 @@ export function ScheduleView({
                             {c.mainCategory.replace("_", " ")}
                           </div>
                         )}
+                        {c.age && (
+                          <div className="text-[9px] text-white/70">
+                            {formatAge(c.age)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1058,6 +1089,12 @@ export function ScheduleView({
                     : "Unassigned"}
                 </span>
               </div>
+              {selectedClass.topic && (
+                <div>
+                  <span className="font-semibold text-white/80">Topic: </span>
+                  <span>{selectedClass.topic}</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -1116,7 +1153,11 @@ export function ScheduleView({
                       )?.id ?? ""
                     }
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                    required={locations.length > 0}
                   >
+                    {locations.length === 0 && (
+                      <option value="">—</option>
+                    )}
                     {locations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
@@ -1125,27 +1166,19 @@ export function ScheduleView({
                   </select>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-white/80 text-[11px]">
-                    Instructor
-                  </label>
-                  <select
-                    name="instructorId"
-                    defaultValue={
-                      instructors.find(
-                        (i) => i.name === selectedClass.instructorName,
-                      )?.id ?? ""
-                    }
-                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                  >
-                    <option value="">Unassigned</option>
-                    {instructors.map((inst) => (
-                      <option key={inst.id} value={inst.id}>
-                        {inst.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <InstructorGuestSelector
+                  instructors={instructors}
+                  size="sm"
+                  defaultValue={
+                    selectedClass.guestNames?.length
+                      ? "__guests__"
+                      : instructors.find(
+                          (i) => i.name === selectedClass.instructorName,
+                        )?.id ?? ""
+                  }
+                  defaultGuestNames={selectedClass.guestNames ?? []}
+                  defaultTopic={selectedClass.topic ?? ""}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1215,39 +1248,22 @@ export function ScheduleView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-white/80 text-[11px]">
-                    Min age
-                  </label>
-                  <input
-                    type="number"
-                    name="minAgeYears"
-                    min={0}
-                    defaultValue={
-                      selectedClass.minAgeYears != null
-                        ? selectedClass.minAgeYears
-                        : ""
-                    }
-                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-white/80 text-[11px]">
-                    Max age
-                  </label>
-                  <input
-                    type="number"
-                    name="maxAgeYears"
-                    min={0}
-                    defaultValue={
-                      selectedClass.maxAgeYears != null
-                        ? selectedClass.maxAgeYears
-                        : ""
-                    }
-                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                  />
-                </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-white/80 text-[11px]">
+                  Age
+                </label>
+                <select
+                  name="age"
+                  defaultValue={selectedClass.age ?? ""}
+                  className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                >
+                  <option value="">No restriction</option>
+                  <option value="ALL_AGES">All ages</option>
+                  <option value="ADULT_17_PLUS">17+</option>
+                  <option value="AGE_4_6">4-6 years</option>
+                  <option value="AGE_7_10">7-10 years</option>
+                  <option value="AGE_11_15">11-15 years</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1735,6 +1751,7 @@ export function ScheduleView({
               className="space-y-3 text-xs border-t border-white/10 pt-3 mt-1"
             >
               <input type="hidden" name="gymSlug" value={gymSlug} />
+              <input type="hidden" name="gymId" value={gymId} />
               <input
                 type="hidden"
                 name="datesJson"
@@ -1760,8 +1777,11 @@ export function ScheduleView({
                   <select
                     name="locationId"
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                    required
+                    required={locations.length > 0}
                   >
+                    {locations.length === 0 && (
+                      <option value="">—</option>
+                    )}
                     {locations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
@@ -1769,22 +1789,10 @@ export function ScheduleView({
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-white/80 text-[11px]">
-                    Instructor
-                  </label>
-                  <select
-                    name="instructorId"
-                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                  >
-                    <option value="">Unassigned</option>
-                    {instructors.map((inst) => (
-                      <option key={inst.id} value={inst.id}>
-                        {inst.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <InstructorGuestSelector
+                  instructors={instructors}
+                  size="sm"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1881,24 +1889,19 @@ export function ScheduleView({
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="font-semibold text-white/80 text-[11px]">
-                    Min / Max age
+                    Age
                   </label>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      name="minAgeYears"
-                      min={0}
-                      className="w-1/2 px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                      placeholder="Min"
-                    />
-                    <input
-                      type="number"
-                      name="maxAgeYears"
-                      min={0}
-                      className="w-1/2 px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                      placeholder="Max"
-                    />
-                  </div>
+                  <select
+                    name="age"
+                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                  >
+                    <option value="">No restriction</option>
+                    <option value="ALL_AGES">All ages</option>
+                    <option value="ADULT_17_PLUS">17+</option>
+                    <option value="AGE_4_6">4-6 years</option>
+                    <option value="AGE_7_10">7-10 years</option>
+                    <option value="AGE_11_15">11-15 years</option>
+                  </select>
                 </div>
               </div>
 

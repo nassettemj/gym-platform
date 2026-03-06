@@ -9,11 +9,10 @@ type Plan = {
   priceCents: number;
   durationDays: number;
   maxCheckInsPerMonth: number | null;
-  billingKind: "SUBSCRIPTION" | "ONE_TIME";
-  billingInterval: "DAY" | "WEEK" | "MONTH" | "YEAR" | null;
-  usageKind: "UNLIMITED" | "LIMITED_CREDITS";
-  creditsPerPeriod: number | null;
-  creditsPeriodUnit: "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE" | null;
+  billingKind: "SUBSCRIPTION" | "PASS";
+  duration: "ONE_MONTH" | "ONE_YEAR";
+  age: "ADULTS" | "KIDS_AND_JUNIORS";
+  visits: "ONE_VISIT" | "TEN_VISITS" | null;
 };
 
 type Props = {
@@ -25,27 +24,6 @@ type Props = {
   deleteAction: (formData: FormData) => void;
 };
 
-function durationKeyFromDays(days: number): string {
-  switch (days) {
-    case 1:
-      return "single_day";
-    case 7:
-      return "week";
-    case 30:
-      return "month";
-    case 365:
-      return "year";
-    default:
-      return "month";
-  }
-}
-
-function classLimitKey(value: number | null): string {
-  if (value == null) return "unlimited";
-  if (value === 1 || value === 2 || value === 3) return String(value);
-  return "unlimited";
-}
-
 export function MembershipPlansList({
   gymSlug,
   gymId: _gymId,
@@ -55,8 +33,16 @@ export function MembershipPlansList({
   deleteAction,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFormBillingKind, setEditFormBillingKind] = useState<"SUBSCRIPTION" | "PASS">("SUBSCRIPTION");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
+
+  function startEditing(plan: Plan) {
+    setDeletingId(null);
+    setConfirmText("");
+    setEditingId(plan.id);
+    setEditFormBillingKind(plan.billingKind);
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -66,8 +52,6 @@ export function MembershipPlansList({
 
         if (isEditing) {
           const price = (plan.priceCents / 100).toFixed(2);
-          const durationKey = durationKeyFromDays(plan.durationDays);
-          const limitKey = classLimitKey(plan.maxCheckInsPerMonth);
 
           return (
             <div
@@ -104,96 +88,76 @@ export function MembershipPlansList({
                   <select
                     id={`billingKind-${plan.id}`}
                     name="billingKind"
-                    defaultValue={plan.billingKind}
+                    value={editFormBillingKind}
+                    onChange={(e) => setEditFormBillingKind(e.target.value as "SUBSCRIPTION" | "PASS")}
                     required
                     className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
                   >
                     <option value="SUBSCRIPTION">Subscription</option>
-                    <option value="ONE_TIME">Single purchase</option>
+                    <option value="PASS">Pass</option>
                   </select>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor={`billingInterval-${plan.id}`}
-                    className="text-xs font-medium"
-                  >
-                    Billing interval
-                  </label>
-                  <select
-                    id={`billingInterval-${plan.id}`}
-                    name="billingInterval"
-                    defaultValue={plan.billingInterval ?? "MONTH"}
-                    required
-                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                  >
-                    <option value="DAY">Day</option>
-                    <option value="WEEK">Week</option>
-                    <option value="MONTH">Month</option>
-                    <option value="YEAR">Year</option>
-                  </select>
-                </div>
+                {editFormBillingKind === "SUBSCRIPTION" ? (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor={`duration-${plan.id}`}
+                        className="text-xs font-medium"
+                      >
+                        Duration
+                      </label>
+                      <select
+                        id={`duration-${plan.id}`}
+                        name="duration"
+                        defaultValue={plan.duration}
+                        required
+                        className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                      >
+                        <option value="ONE_MONTH">1 month</option>
+                        <option value="ONE_YEAR">1 year</option>
+                      </select>
+                    </div>
 
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor={`usageKind-${plan.id}`}
-                    className="text-xs font-medium"
-                  >
-                    Usage type
-                  </label>
-                  <select
-                    id={`usageKind-${plan.id}`}
-                    name="usageKind"
-                    defaultValue={plan.usageKind}
-                    required
-                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                  >
-                    <option value="UNLIMITED">Unlimited</option>
-                    <option value="LIMITED_CREDITS">Limited credits</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor={`creditsPerPeriod-${plan.id}`}
-                    className="text-xs font-medium"
-                  >
-                    Credits (if limited)
-                  </label>
-                  <input
-                    id={`creditsPerPeriod-${plan.id}`}
-                    name="creditsPerPeriod"
-                    type="number"
-                    min="1"
-                    defaultValue={
-                      plan.creditsPerPeriod != null
-                        ? String(plan.creditsPerPeriod)
-                        : ""
-                    }
-                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor={`creditsPeriodUnit-${plan.id}`}
-                    className="text-xs font-medium"
-                  >
-                    Credits period
-                  </label>
-                  <select
-                    id={`creditsPeriodUnit-${plan.id}`}
-                    name="creditsPeriodUnit"
-                    defaultValue={plan.creditsPeriodUnit ?? "WEEK"}
-                    className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                  >
-                    <option value="DAY">Per day</option>
-                    <option value="WEEK">Per week</option>
-                    <option value="MONTH">Per month</option>
-                    <option value="YEAR">Per year</option>
-                    <option value="NONE">Total (no reset)</option>
-                  </select>
-                </div>
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor={`age-${plan.id}`}
+                        className="text-xs font-medium"
+                      >
+                        Age
+                      </label>
+                      <select
+                        id={`age-${plan.id}`}
+                        name="age"
+                        defaultValue={plan.age}
+                        required
+                        className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                      >
+                        <option value="ADULTS">Adults</option>
+                        <option value="KIDS_AND_JUNIORS">Kids & Juniors</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label
+                      htmlFor={`visits-${plan.id}`}
+                      className="text-xs font-medium"
+                    >
+                      Visits
+                    </label>
+                    <select
+                      id={`visits-${plan.id}`}
+                      name="visits"
+                      defaultValue={plan.visits ?? "ONE_VISIT"}
+                      required
+                      className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                    >
+                      <option value="ONE_VISIT">1 visit</option>
+                      <option value="TEN_VISITS">10 visits</option>
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-1">
                   <label
@@ -289,17 +253,11 @@ export function MembershipPlansList({
             className="flex flex-col gap-2 border border-white/15 rounded-xl p-4 bg-black/40 cursor-pointer min-h-[180px]"
             role="button"
             tabIndex={0}
-            onClick={() => {
-              setDeletingId(null);
-              setConfirmText("");
-              setEditingId(plan.id);
-            }}
+            onClick={() => startEditing(plan)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                setDeletingId(null);
-                setConfirmText("");
-                setEditingId(plan.id);
+                startEditing(plan);
               }
             }}
           >
@@ -310,38 +268,14 @@ export function MembershipPlansList({
             {/* Plan details stacked vertically */}
             <div className="mt-1 space-y-0.5 text-xs text-white/60">
               <div>
-                {plan.billingKind === "ONE_TIME"
-                  ? "One-time"
-                  : plan.billingInterval === "DAY"
-                  ? "Daily subscription"
-                  : plan.billingInterval === "WEEK"
-                  ? "Weekly subscription"
-                  : plan.billingInterval === "YEAR"
-                  ? "Yearly subscription"
-                  : "Monthly subscription"}
+                {plan.billingKind === "PASS" ? "Pass" : "Subscription"}
               </div>
               <div>
-                {plan.usageKind === "UNLIMITED"
-                  ? "Unlimited"
-                  : plan.creditsPerPeriod != null &&
-                    plan.creditsPeriodUnit != null
-                  ? (() => {
-                      const unit =
-                        plan.creditsPeriodUnit === "DAY"
-                          ? "day"
-                          : plan.creditsPeriodUnit === "WEEK"
-                          ? "week"
-                          : plan.creditsPeriodUnit === "MONTH"
-                          ? "month"
-                          : plan.creditsPeriodUnit === "YEAR"
-                          ? "year"
-                          : "total";
-                      if (plan.creditsPeriodUnit === "NONE") {
-                        return `${plan.creditsPerPeriod} classes total`;
-                      }
-                      return `${plan.creditsPerPeriod} classes/${unit}`;
-                    })()
-                  : "Limited credits"}
+                {plan.billingKind === "PASS"
+                  ? plan.visits === "TEN_VISITS"
+                    ? "10 visits"
+                    : "1 visit"
+                  : `${plan.duration === "ONE_YEAR" ? "1 year" : "1 month"} · ${plan.age === "KIDS_AND_JUNIORS" ? "Kids & Juniors" : "Adults"}`}
               </div>
               <div>€{(plan.priceCents / 100).toFixed(2)}</div>
             </div>

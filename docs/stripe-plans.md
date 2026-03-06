@@ -13,12 +13,10 @@ This document summarizes how `MembershipPlan`, `Member`, and related models map 
 - `priceCents` → Stripe Price `unit_amount` (always in EUR).
 - `billingKind`:
   - `SUBSCRIPTION` → Stripe Price with `type = "recurring"`.
-  - `ONE_TIME` → Stripe Price with `type = "one_time"` (no `recurring` block).
-- `billingInterval` / `intervalCount`:
-  - Map to Stripe `price.recurring.interval` and `price.recurring.interval_count`.
-- Usage / credits:
-  - `usageKind = UNLIMITED` → no per-period quantity cap in Stripe; enforcement is done in-app.
-  - `usageKind = LIMITED_CREDITS` and (`creditsPerPeriod`, `creditsPeriodUnit`) → application-enforced limits (e.g. 3 classes per week), independent of Stripe.
+  - `PASS` → Stripe Price with `type = "one_time"` (no `recurring` block).
+- `duration` (ONE_MONTH, ONE_YEAR):
+  - For subscriptions: maps to Stripe `price.recurring.interval` (month/year) and `interval_count`.
+- `age` (ADULTS, KIDS_AND_JUNIORS): application-only, not sent to Stripe.
 - Stripe identifiers:
   - `stripeProductId` → Stripe Product `id` associated with this plan.
   - `stripePriceId` → default Stripe Price `id` used when starting subscriptions or one-time purchases for this plan.

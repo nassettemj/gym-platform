@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { BillingInterval, CreditInterval } from "@prisma/client";
+import type { PlanDuration, PlanAge, PlanVisits } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
@@ -10,19 +10,16 @@ interface MembershipsPageProps {
   }>;
 }
 
-function mapBillingIntervalToDays(value: string): number {
-  switch (value) {
-    case "DAY":
-      return 1;
-    case "WEEK":
-      return 7;
-    case "MONTH":
-      return 30;
-    case "YEAR":
-      return 365;
-    default:
-      return 30;
-  }
+function durationDaysFromDuration(duration: string): number {
+  return duration === "ONE_YEAR" ? 365 : 30;
+}
+
+function durationDaysFromVisits(visits: string): number {
+  return visits === "TEN_VISITS" ? 90 : 30;
+}
+
+function maxCheckInsFromVisits(visits: string): number | null {
+  return visits === "TEN_VISITS" ? 10 : 1;
 }
 
 async function createPlan(formData: FormData) {
@@ -38,10 +35,9 @@ async function createPlan(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
-  const billingInterval = String(formData.get("billingInterval") ?? "").trim();
-  const usageKind = String(formData.get("usageKind") ?? "").trim();
-  const creditsPerPeriodRaw = String(formData.get("creditsPerPeriod") ?? "").trim();
-  const creditsPeriodUnit = String(formData.get("creditsPeriodUnit") ?? "").trim();
+  const duration = String(formData.get("duration") ?? "").trim();
+  const age = String(formData.get("age") ?? "").trim();
+  const visits = String(formData.get("visits") ?? "").trim();
 
   // Mandatory core fields
   if (!gymId || !name || !priceStr || !billingKind) return;
@@ -49,10 +45,11 @@ async function createPlan(formData: FormData) {
   const priceNumber = Number(priceStr.replace(",", "."));
   if (!Number.isFinite(priceNumber) || priceNumber < 0) return;
 
-  const durationDays =
-    billingKind === "ONE_TIME"
-      ? mapBillingIntervalToDays(billingInterval || "DAY")
-      : mapBillingIntervalToDays(billingInterval || "MONTH");
+  const isPass = billingKind === "PASS";
+  const durationDays = isPass
+    ? durationDaysFromVisits(visits || "ONE_VISIT")
+    : durationDaysFromDuration(duration || "ONE_MONTH");
+  const maxCheckIns = isPass ? maxCheckInsFromVisits(visits || "ONE_VISIT") : null;
   const priceCents = Math.round(priceNumber * 100);
 
   const stripeProductId: string | null = null;
@@ -65,22 +62,11 @@ async function createPlan(formData: FormData) {
       description: null,
       priceCents,
       durationDays,
-      maxCheckInsPerMonth: null,
-      billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-      billingInterval: billingInterval
-        ? (billingInterval as BillingInterval)
-        : null,
-      intervalCount: 1,
-      usageKind:
-        usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
-      creditsPerPeriod:
-        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? Number(creditsPerPeriodRaw)
-          : null,
-      creditsPeriodUnit:
-        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
-          : null,
+      maxCheckInsPerMonth: maxCheckIns,
+      billingKind: isPass ? "PASS" : "SUBSCRIPTION",
+      duration: (duration === "ONE_YEAR" ? "ONE_YEAR" : "ONE_MONTH") as PlanDuration,
+      age: (age === "KIDS_AND_JUNIORS" ? "KIDS_AND_JUNIORS" : "ADULTS") as PlanAge,
+      visits: isPass ? ((visits === "TEN_VISITS" ? "TEN_VISITS" : "ONE_VISIT") as PlanVisits) : null,
       stripeProductId,
       stripePriceId,
     },
@@ -102,20 +88,20 @@ async function updatePlan(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
-  const billingInterval = String(formData.get("billingInterval") ?? "").trim();
-  const usageKind = String(formData.get("usageKind") ?? "").trim();
-  const creditsPerPeriodRaw = String(formData.get("creditsPerPeriod") ?? "").trim();
-  const creditsPeriodUnit = String(formData.get("creditsPeriodUnit") ?? "").trim();
+  const duration = String(formData.get("duration") ?? "").trim();
+  const age = String(formData.get("age") ?? "").trim();
+  const visits = String(formData.get("visits") ?? "").trim();
 
   if (!planId || !name || !priceStr || !billingKind) return;
 
   const priceNumber = Number(priceStr.replace(",", "."));
   if (!Number.isFinite(priceNumber) || priceNumber < 0) return;
 
-  const durationDays =
-    billingKind === "ONE_TIME"
-      ? mapBillingIntervalToDays(billingInterval || "DAY")
-      : mapBillingIntervalToDays(billingInterval || "MONTH");
+  const isPass = billingKind === "PASS";
+  const durationDays = isPass
+    ? durationDaysFromVisits(visits || "ONE_VISIT")
+    : durationDaysFromDuration(duration || "ONE_MONTH");
+  const maxCheckIns = isPass ? maxCheckInsFromVisits(visits || "ONE_VISIT") : null;
   const priceCents = Math.round(priceNumber * 100);
 
   await prisma.membershipPlan.update({
@@ -124,21 +110,11 @@ async function updatePlan(formData: FormData) {
       name,
       priceCents,
       durationDays,
-      maxCheckInsPerMonth: null,
-      billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-      billingInterval: billingInterval
-        ? (billingInterval as BillingInterval)
-        : null,
-      intervalCount: 1,
-      usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
-      creditsPerPeriod:
-        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? Number(creditsPerPeriodRaw)
-          : null,
-      creditsPeriodUnit:
-        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-          ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
-          : null,
+      maxCheckInsPerMonth: maxCheckIns,
+      billingKind: isPass ? "PASS" : "SUBSCRIPTION",
+      duration: (duration === "ONE_YEAR" ? "ONE_YEAR" : "ONE_MONTH") as PlanDuration,
+      age: (age === "KIDS_AND_JUNIORS" ? "KIDS_AND_JUNIORS" : "ADULTS") as PlanAge,
+      visits: isPass ? ((visits === "TEN_VISITS" ? "TEN_VISITS" : "ONE_VISIT") as PlanVisits) : null,
     },
   });
 

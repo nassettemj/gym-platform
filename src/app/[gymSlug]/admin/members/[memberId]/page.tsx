@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { getAgeAt } from "@/lib/age";
+import { getAgeAt, canAttendClass } from "@/lib/age";
 import { MemberProfilePanel } from "@/components/MemberProfilePanel";
+import { MemberScheduleView } from "@/components/MemberScheduleView";
+import { MemberClassHistoryTable } from "@/components/MemberClassHistoryTable";
 import { MemberPlanChooser } from "@/components/MemberPlanChooser";
 import { UserRole } from "@prisma/client";
 import { ROLE_RANK, roleAtLeast } from "@/lib/roles";
@@ -246,7 +249,7 @@ async function updateMemberUserRole(formData: FormData) {
   redirect(`/${gymSlug}/admin/members/${memberId}`);
 }
 
-async function createCheckIn(formData: FormData) {
+export async function createCheckIn(formData: FormData) {
   "use server";
 
   const session = await auth();
@@ -276,9 +279,9 @@ async function createCheckIn(formData: FormData) {
     prisma.class.findFirst({
       where: {
         id: classId,
-        location: { gymId: gym.id },
+        gymId: gym.id,
       },
-      include: { location: true },
+      include: { location: true, instructor: true },
     }),
     prisma.subscription.findFirst({
       where: {
@@ -295,58 +298,61 @@ async function createCheckIn(formData: FormData) {
   if (!member || !clazz) return;
 
   const at = clazz.startAt ?? new Date();
-  if (clazz.minAgeYears != null || clazz.maxAgeYears != null) {
+  if (clazz.age != null && clazz.age !== "ALL_AGES") {
     if (!member.birthDate) {
       redirect(`/${gymSlug}/admin/members/${memberId}?error=birthdate_required`);
     }
-    const age = getAgeAt(member.birthDate, at);
-    if (clazz.minAgeYears != null && age < clazz.minAgeYears) {
-      redirect(`/${gymSlug}/admin/members/${memberId}?error=too_young`);
-    }
-    if (clazz.maxAgeYears != null && age > clazz.maxAgeYears) {
-      redirect(`/${gymSlug}/admin/members/${memberId}?error=too_old`);
+    const memberAge = getAgeAt(member.birthDate, at);
+    switch (clazz.age) {
+      case "ADULT_17_PLUS":
+        if (memberAge < 17) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_young`);
+        }
+        break;
+      case "AGE_4_6":
+        if (memberAge < 4) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_young`);
+        }
+        if (memberAge > 6) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_old`);
+        }
+        break;
+      case "AGE_7_10":
+        if (memberAge < 7) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_young`);
+        }
+        if (memberAge > 10) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_old`);
+        }
+        break;
+      case "AGE_11_15":
+        if (memberAge < 11) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_young`);
+        }
+        if (memberAge > 15) {
+          redirect(`/${gymSlug}/admin/members/${memberId}?error=too_old`);
+        }
+        break;
     }
   }
 
-  // Enforce plan usage limits if there is an active subscription with limited credits.
-  if (activeSubscription?.plan?.usageKind === "LIMITED_CREDITS" && activeSubscription.plan.creditsPerPeriod != null && activeSubscription.plan.creditsPeriodUnit != null) {
-    const unit = activeSubscription.plan.creditsPeriodUnit;
-
-    let windowStart = new Date(at);
-    let windowEnd = new Date(at);
-
-    if (unit === "DAY") {
-      windowStart.setHours(0, 0, 0, 0);
-      windowEnd.setHours(23, 59, 59, 999);
-    } else if (unit === "WEEK") {
-      const day = windowStart.getDay(); // 0 (Sun) - 6 (Sat)
-      const diffToMonday = (day + 6) % 7; // Monday as start of week
-      windowStart.setDate(windowStart.getDate() - diffToMonday);
-      windowStart.setHours(0, 0, 0, 0);
-      windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() + 7);
-    } else if (unit === "MONTH") {
-      windowStart = new Date(windowStart.getFullYear(), windowStart.getMonth(), 1, 0, 0, 0, 0);
-      windowEnd = new Date(windowStart.getFullYear(), windowStart.getMonth() + 1, 1, 0, 0, 0, 0);
-    } else if (unit === "YEAR") {
-      windowStart = new Date(windowStart.getFullYear(), 0, 1, 0, 0, 0, 0);
-      windowEnd = new Date(windowStart.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
-    } else if (unit === "NONE") {
-      windowStart = activeSubscription.startsAt;
-      windowEnd = activeSubscription.endsAt;
-    }
-
+  // Enforce visit limit for Pass plans (instructors can always sign up for their own classes)
+  const isInstructorOfClass = member.id === clazz.instructor?.memberId;
+  if (
+    !isInstructorOfClass &&
+    activeSubscription?.plan?.billingKind === "PASS" &&
+    activeSubscription.plan.maxCheckInsPerMonth != null
+  ) {
     const usedCount = await prisma.checkIn.count({
       where: {
         memberId: member.id,
         checkedAt: {
-          gte: windowStart,
-          lt: windowEnd,
+          gte: activeSubscription.startsAt,
+          lt: activeSubscription.endsAt,
         },
       },
     });
-
-    if (usedCount >= activeSubscription.plan.creditsPerPeriod) {
+    if (usedCount >= activeSubscription.plan.maxCheckInsPerMonth) {
       redirect(`/${gymSlug}/admin/members/${memberId}?error=usage_limit_reached`);
     }
   }
@@ -359,7 +365,140 @@ async function createCheckIn(formData: FormData) {
     },
   });
 
-  redirect(`/${gymSlug}/admin/members/${memberId}`);
+  revalidatePath(`/${gymSlug}/admin/members/${memberId}`);
+  revalidatePath(`/${gymSlug}/admin/my-schedule`);
+}
+
+export async function bulkCreateCheckIns(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const user = session?.user as any;
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  const memberId = String(formData.get("memberId") ?? "");
+  const classIds = formData.getAll("classIds").map((v) => String(v).trim()).filter(Boolean);
+
+  if (!gymSlug || !memberId || classIds.length === 0) return;
+
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    select: { id: true },
+  });
+  if (!gym) notFound();
+
+  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+    redirect(`/${gymSlug}/login`);
+  }
+
+  const [member, activeSubscription] = await Promise.all([
+    prisma.member.findFirst({
+      where: { id: memberId, gymId: gym.id },
+      select: { id: true, birthDate: true },
+    }),
+    prisma.subscription.findFirst({
+      where: { memberId, status: "ACTIVE" },
+      include: { plan: true },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  if (!member) return;
+
+  const classes = await prisma.class.findMany({
+    where: { id: { in: classIds }, gymId: gym.id },
+    include: { location: true, instructor: true },
+  });
+
+  const created: string[] = [];
+  for (const clazz of classes) {
+    const at = clazz.startAt ?? new Date();
+    if (clazz.age != null && clazz.age !== "ALL_AGES") {
+      if (!member.birthDate) {
+        redirect(`/${gymSlug}/admin/members/${memberId}?error=birthdate_required`);
+      }
+      const memberAge = getAgeAt(member.birthDate, at);
+      switch (clazz.age) {
+        case "ADULT_17_PLUS":
+          if (memberAge < 17) continue;
+          break;
+        case "AGE_4_6":
+          if (memberAge < 4 || memberAge > 6) continue;
+          break;
+        case "AGE_7_10":
+          if (memberAge < 7 || memberAge > 10) continue;
+          break;
+        case "AGE_11_15":
+          if (memberAge < 11 || memberAge > 15) continue;
+          break;
+      }
+    }
+
+    const isInstructorOfClass = member.id === clazz.instructor?.memberId;
+    if (
+      !isInstructorOfClass &&
+      activeSubscription?.plan?.billingKind === "PASS" &&
+      activeSubscription.plan.maxCheckInsPerMonth != null
+    ) {
+      const usedCount = await prisma.checkIn.count({
+        where: {
+          memberId: member.id,
+          checkedAt: {
+            gte: activeSubscription.startsAt,
+            lt: activeSubscription.endsAt,
+          },
+        },
+      });
+      if (usedCount + created.length >= activeSubscription.plan.maxCheckInsPerMonth) {
+        break;
+      }
+    }
+
+    await prisma.checkIn.create({
+      data: {
+        memberId: member.id,
+        locationId: clazz.locationId,
+        classId: clazz.id,
+      },
+    });
+    created.push(clazz.id);
+  }
+
+  revalidatePath(`/${gymSlug}/admin/members/${memberId}`);
+  revalidatePath(`/${gymSlug}/admin/my-schedule`);
+}
+
+export async function deleteCheckIn(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const user = session?.user as any;
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  const memberId = String(formData.get("memberId") ?? "");
+  const classId = String(formData.get("classId") ?? "").trim();
+
+  if (!gymSlug || !memberId || !classId) return;
+
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    select: { id: true },
+  });
+  if (!gym) notFound();
+
+  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+    redirect(`/${gymSlug}/login`);
+  }
+
+  await prisma.checkIn.deleteMany({
+    where: {
+      memberId,
+      classId,
+    },
+  });
+
+  revalidatePath(`/${gymSlug}/admin/members/${memberId}`);
+  revalidatePath(`/${gymSlug}/admin/my-schedule`);
 }
 
 async function addSubscription(formData: FormData) {
@@ -672,6 +811,11 @@ export default async function MemberDetailPage({
   const isMemberViewer = user.role === "MEMBER";
   const isProfileComplete = !!member.birthDate && !!member.phone;
   const hideMemberExtras = isMemberViewer && !isProfileComplete;
+  const userIsStaffViewingOwnProfile =
+    user.memberId === member.id &&
+    ["GYM_ADMIN", "STAFF", "INSTRUCTOR", "LOCATION_ADMIN"].includes(
+      user.role ?? ""
+    );
 
   const now = new Date();
   const activeSubscription =
@@ -685,6 +829,233 @@ export default async function MemberDetailPage({
 
   const summarySubscription =
     activeSubscription ?? member.subscriptions[0] ?? null;
+
+  let scheduleClassItems: {
+    id: string;
+    name: string;
+    startAt: string;
+    endAt: string;
+    locationName: string;
+    instructorName: string;
+    guestNames: string[];
+    topic: string | null;
+    mainCategory: string | null;
+    subCategory: string | null;
+    age: "ALL_AGES" | "ADULT_17_PLUS" | "AGE_4_6" | "AGE_7_10" | "AGE_11_15" | null;
+    capacity: number | null;
+    signupCount: number;
+    instructorId: string | null;
+    instructorMemberId: string | null;
+    attendanceConfirmedAt: string | null;
+    attended: boolean;
+  }[] = [];
+  let checkedInClassIds: string[] = [];
+
+  const showSchedule =
+    (activeSubscription || userIsStaffViewingOwnProfile) && !hideMemberExtras;
+
+  if (showSchedule) {
+    const now = new Date();
+    const startWindow = new Date(now);
+    startWindow.setDate(startWindow.getDate() - 14);
+    const endWindow = new Date(now);
+    endWindow.setDate(endWindow.getDate() + 60);
+
+    const classes = await prisma.class.findMany({
+      where: {
+        gymId: gym.id,
+        OR: [
+          { startAt: { gte: startWindow, lte: endWindow } },
+          { startAt: null },
+        ],
+      },
+      include: {
+        instructor: true,
+        location: true,
+        _count: { select: { checkIns: true } },
+      },
+      orderBy: { startAt: "asc" },
+    });
+
+    const ageFiltered =
+      member.birthDate != null
+        ? classes.filter((c) =>
+            canAttendClass(
+              member.birthDate!,
+              c.age,
+              c.startAt ?? new Date(),
+            ),
+          )
+        : classes.filter((c) => !c.age || c.age === "ALL_AGES");
+
+    scheduleClassItems = ageFiltered.map((c) => ({
+      id: c.id,
+      name: c.name,
+      startAt: c.startAt?.toISOString() ?? "",
+      endAt: c.endAt?.toISOString() ?? "",
+      locationName: c.location?.name ?? "",
+      instructorName:
+        c.instructor?.name ??
+        (c.guestNames?.length
+          ? `Guests: ${c.guestNames.join(", ")}`
+          : ""),
+      guestNames: c.guestNames ?? [],
+      topic: c.topic ?? null,
+      mainCategory: c.mainCategory ?? null,
+      subCategory: c.subCategory ?? null,
+      age: c.age ?? null,
+      capacity: c.capacity ?? null,
+      signupCount: (c as { _count?: { checkIns: number } })._count?.checkIns ?? 0,
+      instructorId: c.instructor?.id ?? null,
+      instructorMemberId: c.instructor?.memberId ?? null,
+      attendanceConfirmedAt: c.attendanceConfirmedAt?.toISOString() ?? null,
+      attended: false,
+    }));
+
+    const classIds = scheduleClassItems.map((item) => item.id);
+    let checkInAttendedByClassId: Record<string, boolean> = {};
+    if (classIds.length > 0) {
+      const checkIns = await prisma.checkIn.findMany({
+        where: {
+          memberId: member.id,
+          classId: { in: classIds },
+        },
+        select: { classId: true, attended: true },
+      });
+      checkedInClassIds = checkIns
+        .map((ci) => ci.classId)
+        .filter((id): id is string => id != null);
+      for (const ci of checkIns) {
+        if (ci.classId) {
+          checkInAttendedByClassId[ci.classId] = ci.attended;
+        }
+      }
+    }
+
+    scheduleClassItems = scheduleClassItems.map((item) => ({
+      ...item,
+      attended: checkInAttendedByClassId[item.id] ?? false,
+    }));
+  }
+
+  const showClassHistory =
+    !hideMemberExtras &&
+    (user.memberId === member.id ||
+      user.role === "PLATFORM_ADMIN" ||
+      user.role === "GYM_ADMIN");
+
+  const checkInHistoryRaw = showClassHistory
+    ? await prisma.checkIn.findMany({
+        where: {
+          memberId: member.id,
+          classId: { not: null },
+        },
+        include: {
+          class: {
+            select: {
+              name: true,
+              startAt: true,
+              endAt: true,
+              dayOfWeek: true,
+              startTime: true,
+              endTime: true,
+              mainCategory: true,
+              subCategory: true,
+              age: true,
+              discipline: true,
+              topic: true,
+              capacity: true,
+              attendanceConfirmedAt: true,
+              guestNames: true,
+              location: { select: { name: true } },
+              instructor: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { checkedAt: "desc" },
+        take: 50,
+      })
+    : [];
+
+  const checkInHistory: Array<{
+    id: string;
+    className: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    locationName: string | null;
+    instructorName: string | null;
+    mainCategory: string | null;
+    subCategory: string | null;
+    age: string | null;
+    discipline: string | null;
+    topic: string | null;
+    capacity: number | null;
+    signedUpAt: string;
+    status: "Signed up" | "Present" | "Absent";
+  }> = checkInHistoryRaw.map((ci) => {
+    const c = ci.class;
+    if (!c) {
+      return {
+        id: ci.id,
+        className: "",
+        date: "",
+        startTime: "",
+        endTime: "",
+        locationName: null,
+        instructorName: null,
+        mainCategory: null,
+        subCategory: null,
+        age: null,
+        discipline: null,
+        topic: null,
+        capacity: null,
+        signedUpAt: ci.checkedAt.toISOString(),
+        status: "Signed up" as const,
+      };
+    }
+    const dateStr = c.startAt
+      ? c.startAt.toISOString().slice(0, 10)
+      : "";
+    const startTimeStr = c.startAt
+      ? c.startAt.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : c.startTime ?? "";
+    const endTimeStr = c.endAt
+      ? c.endAt.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : c.endTime ?? "";
+    const instructorName =
+      c.instructor?.name ??
+      (c.guestNames?.length ? `Guests: ${c.guestNames.join(", ")}` : null);
+    let status: "Signed up" | "Present" | "Absent" = "Signed up";
+    if (c.attendanceConfirmedAt) {
+      status = ci.attended ? "Present" : "Absent";
+    }
+    return {
+      id: ci.id,
+      className: c.name ?? "",
+      date: dateStr,
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+      locationName: c.location?.name ?? null,
+      instructorName,
+      mainCategory: c.mainCategory,
+      subCategory: c.subCategory,
+      age: c.age,
+      discipline: c.discipline ?? null,
+      topic: c.topic ?? null,
+      capacity: c.capacity ?? null,
+      signedUpAt: ci.checkedAt.toISOString(),
+      status,
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -745,46 +1116,17 @@ export default async function MemberDetailPage({
                 </div>
                 <div className="mt-1 space-y-0.5 text-[11px] text-white/60">
                   <div>
-                    {summarySubscription.plan?.billingKind === "ONE_TIME"
-                      ? "One-time"
-                      : summarySubscription.plan?.billingInterval === "DAY"
-                      ? "Daily subscription"
-                      : summarySubscription.plan?.billingInterval === "WEEK"
-                      ? "Weekly subscription"
-                      : summarySubscription.plan?.billingInterval === "YEAR"
-                      ? "Yearly subscription"
-                      : "Monthly subscription"}
+                    {summarySubscription.plan?.billingKind === "PASS" ? "Pass" : "Subscription"}
                   </div>
-                  <div>
-                    {summarySubscription.plan?.usageKind === "UNLIMITED"
-                      ? "Unlimited"
-                      : summarySubscription.plan?.creditsPerPeriod != null &&
-                        summarySubscription.plan?.creditsPeriodUnit != null
-                      ? (() => {
-                          const unit =
-                            summarySubscription.plan!.creditsPeriodUnit ===
-                            "DAY"
-                              ? "day"
-                              : summarySubscription.plan!.creditsPeriodUnit ===
-                                "WEEK"
-                              ? "week"
-                              : summarySubscription.plan!.creditsPeriodUnit ===
-                                "MONTH"
-                              ? "month"
-                              : summarySubscription.plan!.creditsPeriodUnit ===
-                                "YEAR"
-                              ? "year"
-                              : "total";
-                          if (
-                            summarySubscription.plan!.creditsPeriodUnit ===
-                            "NONE"
-                          ) {
-                            return `${summarySubscription.plan!.creditsPerPeriod} classes total`;
-                          }
-                          return `${summarySubscription.plan!.creditsPerPeriod} classes/${unit}`;
-                        })()
-                      : "Limited credits"}
-                  </div>
+                  {summarySubscription.plan && (
+                    <div>
+                      {summarySubscription.plan.billingKind === "PASS"
+                        ? summarySubscription.plan.visits === "TEN_VISITS"
+                          ? "10 visits"
+                          : "1 visit"
+                        : `${summarySubscription.plan.duration === "ONE_YEAR" ? "1 year" : "1 month"} · ${summarySubscription.plan.age === "KIDS_AND_JUNIORS" ? "Kids & Juniors" : "Adults"}`}
+                    </div>
+                  )}
                   {summarySubscription.plan?.priceCents != null && (
                     <div>
                       €
@@ -862,6 +1204,37 @@ export default async function MemberDetailPage({
               />
             </div>
           )}
+        </section>
+      )}
+
+      {showSchedule && (
+        <section className="border border-white/10 rounded-xl p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-white/80">Schedule</h2>
+          </div>
+          {!member.birthDate && (
+            <p className="text-xs text-white/60 mb-2">
+              Add your birth date to see classes suited to your age.
+            </p>
+          )}
+          <MemberScheduleView
+            classes={scheduleClassItems}
+            gymSlug={gymSlug}
+            memberId={member.id}
+            checkedInClassIds={checkedInClassIds}
+            signUpAction={createCheckIn}
+            unsignAction={deleteCheckIn}
+            initialViewMode="week"
+          />
+        </section>
+      )}
+
+      {showClassHistory && (
+        <section className="border border-white/10 rounded-xl p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-white/80">Class history</h2>
+          </div>
+          <MemberClassHistoryTable rows={checkInHistory} />
         </section>
       )}
     </div>

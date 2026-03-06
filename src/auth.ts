@@ -14,11 +14,88 @@ export const authOptions: NextAuthOptions = {
         gymSlug: { label: "Gym Slug", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null;
-
-        const email = String(credentials.email).trim();
-        const password = String(credentials.password);
+        const email = String(credentials?.email ?? "").trim();
+        const password = String(credentials?.password ?? "");
         const gymSlug = String((credentials as any).gymSlug ?? "").trim();
+
+        // Dev-only: quick login for localhost testing (NODE_ENV=development)
+        if (process.env.NODE_ENV === "development") {
+          if (email.toLowerCase() === "sup") {
+            const platformAdmin = await prisma.user.findFirst({
+              where: { role: "PLATFORM_ADMIN" },
+            });
+            if (platformAdmin) {
+              return {
+                id: platformAdmin.id,
+                email: platformAdmin.email,
+                name: platformAdmin.name,
+                role: platformAdmin.role,
+                gymId: platformAdmin.gymId,
+                memberId: platformAdmin.memberId,
+              };
+            }
+          }
+          if (email === "__dev_admin__" && gymSlug) {
+            const user = await prisma.user.findFirst({
+              where: {
+                role: "GYM_ADMIN",
+                gym: { slug: gymSlug },
+              },
+            });
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                gymId: user.gymId,
+                memberId: user.memberId,
+              };
+            }
+          }
+          if (email === "__dev_instructor__" && gymSlug) {
+            const user = await prisma.user.findFirst({
+              where: {
+                role: "INSTRUCTOR",
+                gym: { slug: gymSlug },
+              },
+            });
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                gymId: user.gymId,
+                memberId: user.memberId,
+              };
+            }
+          }
+          if (
+            (email === "__dev_member__" || email === "__dev_random_member__") &&
+            gymSlug
+          ) {
+            const members = await prisma.user.findMany({
+              where: {
+                role: "MEMBER",
+                memberId: { not: null },
+                gym: { slug: gymSlug },
+              },
+              take: 20,
+            });
+            const user = members[Math.floor(Math.random() * members.length)];
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                gymId: user.gymId,
+                memberId: user.memberId,
+              };
+            }
+          }
+        }
 
         if (!email || !password) return null;
 

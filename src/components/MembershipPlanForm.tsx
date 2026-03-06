@@ -18,6 +18,7 @@ export function MembershipPlanForm({
   onClose,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [billingKind, setBillingKind] = useState<"SUBSCRIPTION" | "PASS">("SUBSCRIPTION");
 
   const isOpen = forceOpen ?? open;
 
@@ -63,79 +64,66 @@ export function MembershipPlanForm({
             id="billingKind"
             name="billingKind"
             required
+            value={billingKind}
+            onChange={(e) => setBillingKind(e.target.value as "SUBSCRIPTION" | "PASS")}
             className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="SUBSCRIPTION"
           >
             <option value="SUBSCRIPTION">Subscription</option>
-            <option value="ONE_TIME">Single purchase</option>
+            <option value="PASS">Pass</option>
           </select>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="billingInterval" className="text-xs font-medium">
-            Billing interval
-          </label>
-          <select
-            id="billingInterval"
-            name="billingInterval"
-            required
-            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="MONTH"
-          >
-            <option value="DAY">Day</option>
-            <option value="WEEK">Week</option>
-            <option value="MONTH">Month</option>
-            <option value="YEAR">Year</option>
-          </select>
-        </div>
+        {billingKind === "SUBSCRIPTION" ? (
+          <>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="duration" className="text-xs font-medium">
+                Duration
+              </label>
+              <select
+                id="duration"
+                name="duration"
+                required
+                className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                defaultValue="ONE_MONTH"
+              >
+                <option value="ONE_MONTH">1 month</option>
+                <option value="ONE_YEAR">1 year</option>
+              </select>
+            </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="usageKind" className="text-xs font-medium">
-            Usage type
-          </label>
-          <select
-            id="usageKind"
-            name="usageKind"
-            required
-            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="UNLIMITED"
-          >
-            <option value="UNLIMITED">Unlimited</option>
-            <option value="LIMITED_CREDITS">Limited credits</option>
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="creditsPerPeriod" className="text-xs font-medium">
-            Credits (if limited)
-          </label>
-          <input
-            id="creditsPerPeriod"
-            name="creditsPerPeriod"
-            type="number"
-            min="1"
-            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            placeholder="e.g. 3"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="creditsPeriodUnit" className="text-xs font-medium">
-            Credits period
-          </label>
-          <select
-            id="creditsPeriodUnit"
-            name="creditsPeriodUnit"
-            className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-            defaultValue="WEEK"
-          >
-            <option value="DAY">Per day</option>
-            <option value="WEEK">Per week</option>
-            <option value="MONTH">Per month</option>
-            <option value="YEAR">Per year</option>
-            <option value="NONE">Total (no reset)</option>
-          </select>
-        </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="age" className="text-xs font-medium">
+                Age
+              </label>
+              <select
+                id="age"
+                name="age"
+                required
+                className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                defaultValue="ADULTS"
+              >
+                <option value="ADULTS">Adults</option>
+                <option value="KIDS_AND_JUNIORS">Kids & Juniors</option>
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="visits" className="text-xs font-medium">
+              Visits
+            </label>
+            <select
+              id="visits"
+              name="visits"
+              required
+              className="px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+              defaultValue="ONE_VISIT"
+            >
+              <option value="ONE_VISIT">1 visit</option>
+              <option value="TEN_VISITS">10 visits</option>
+            </select>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1">
           <label htmlFor="price" className="text-xs font-medium">
