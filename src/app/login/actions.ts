@@ -1,71 +1,11 @@
 "use server";
 
-import { redirect } from "next/navigation";
-import { signIn } from "@/auth";
-import { prisma } from "@/lib/prisma";
-
 export type LoginState = { error: string } | null;
 
+// This server action is no longer used; login is handled on the client with next-auth/react.
 export async function login(
   _prevState: LoginState,
-  formData: FormData,
+  _formData: FormData,
 ): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "").trim();
-
-  if (!email || !password) return null;
-
-  let result;
-  try {
-    result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-      redirectTo: "/platform/gyms",
-    });
-  } catch (err: unknown) {
-    const e = err as { name?: string };
-    if (e?.name === "CredentialsSignin") {
-      return { error: "Invalid email or password." };
-    }
-    throw err;
-  }
-
-  if (!result) return null;
-  // Decide final landing page based on role and gym.
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      role: true,
-      memberId: true,
-      gym: { select: { slug: true } },
-    },
-  });
-
-  if (user?.role === "PLATFORM_ADMIN") {
-    redirect("/platform/gyms");
-  }
-
-  const gymSlug = user?.gym?.slug;
-
-  if (gymSlug) {
-    if (user?.role === "MEMBER" && user.memberId) {
-      redirect(`/${gymSlug}/admin/members/${user.memberId}`);
-    }
-
-    if (user?.role === "GYM_ADMIN") {
-      redirect(`/${gymSlug}/admin`);
-    }
-  }
-
-  if (typeof result === "string") {
-    redirect(result);
-  }
-
-  const url = (result as { url?: string })?.url;
-  if (url) {
-    redirect(url);
-  }
-
   return null;
 }

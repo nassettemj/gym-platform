@@ -55,36 +55,36 @@ async function createPlan(formData: FormData) {
       : mapBillingIntervalToDays(billingInterval || "MONTH");
   const priceCents = Math.round(priceNumber * 100);
 
-  try {
-    await prisma.membershipPlan.create({
-      data: {
-        gymId,
-        name,
-        description: null,
-        priceCents,
-        durationDays,
-        maxCheckInsPerMonth: null,
-        billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
-        billingInterval: billingInterval
-          ? (billingInterval as BillingInterval)
+  const stripeProductId: string | null = null;
+  const stripePriceId: string | null = null;
+
+  await prisma.membershipPlan.create({
+    data: {
+      gymId,
+      name,
+      description: null,
+      priceCents,
+      durationDays,
+      maxCheckInsPerMonth: null,
+      billingKind: billingKind === "ONE_TIME" ? "ONE_TIME" : "SUBSCRIPTION",
+      billingInterval: billingInterval
+        ? (billingInterval as BillingInterval)
+        : null,
+      intervalCount: 1,
+      usageKind:
+        usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
+      creditsPerPeriod:
+        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+          ? Number(creditsPerPeriodRaw)
           : null,
-        intervalCount: 1,
-        usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
-        creditsPerPeriod:
-          usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-            ? Number(creditsPerPeriodRaw)
-            : null,
-        creditsPeriodUnit:
-          usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
-            ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
-            : null,
-        stripeProductId: null,
-        stripePriceId: null,
-      },
-    });
-  } catch (err) {
-    throw err;
-  }
+      creditsPeriodUnit:
+        usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
+          ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
+          : null,
+      stripeProductId,
+      stripePriceId,
+    },
+  });
 
   redirect(`/${gymSlug}/admin/plans`);
 }
@@ -192,8 +192,13 @@ export default async function MembershipsPage({ params }: MembershipsPageProps) 
     notFound();
   }
 
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
+  if (user.role !== "PLATFORM_ADMIN") {
+    if (user.gymId !== gym.id) {
+      redirect(`/${gymSlug}/login`);
+    }
+    if (user.role !== "GYM_ADMIN" && user.role !== "LOCATION_ADMIN") {
+      redirect(`/${gymSlug}/login`);
+    }
   }
 
   return (

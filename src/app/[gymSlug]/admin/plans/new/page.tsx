@@ -54,6 +54,9 @@ async function createPlan(formData: FormData) {
       : mapBillingIntervalToDays(billingInterval || "MONTH");
   const priceCents = Math.round(priceNumber * 100);
 
+  const stripeProductId: string | null = null;
+  const stripePriceId: string | null = null;
+
   await prisma.membershipPlan.create({
     data: {
       gymId,
@@ -67,7 +70,8 @@ async function createPlan(formData: FormData) {
         ? (billingInterval as BillingInterval)
         : null,
       intervalCount: 1,
-      usageKind: usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
+      usageKind:
+        usageKind === "LIMITED_CREDITS" ? "LIMITED_CREDITS" : "UNLIMITED",
       creditsPerPeriod:
         usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
           ? Number(creditsPerPeriodRaw)
@@ -76,8 +80,8 @@ async function createPlan(formData: FormData) {
         usageKind === "LIMITED_CREDITS" && creditsPerPeriodRaw
           ? ((creditsPeriodUnit || "WEEK") as CreditInterval)
           : null,
-      stripeProductId: null,
-      stripePriceId: null,
+      stripeProductId,
+      stripePriceId,
     },
   });
 

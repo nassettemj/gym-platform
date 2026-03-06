@@ -1,18 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { getAgeAt } from "@/lib/age";
 import { MemberProfilePanel } from "@/components/MemberProfilePanel";
-import { MemberBeltPanel } from "@/components/MemberBeltPanel";
-import { BeltRank } from "@prisma/client";
-
-const BELT_OPTIONS: readonly BeltRank[] = [
-  "WHITE",
-  "BLUE",
-  "PURPLE",
-  "BROWN",
-  "BLACK",
-];
+import { MemberPlanChooser } from "@/components/MemberPlanChooser";
+import { UserRole } from "@prisma/client";
+import { ROLE_RANK, roleAtLeast } from "@/lib/roles";
 
 interface MemberDetailPageProps {
   params: Promise<{
@@ -178,83 +172,76 @@ async function updateMemberProfile(formData: FormData) {
   redirect(`/${gymSlug}/admin/members/${memberId}`);
 }
 
-async function updateBeltStripes(formData: FormData) {
+async function updateMemberUserRole(formData: FormData) {
   "use server";
 
-  const session = await auth();
-  const user = session?.user as { id?: string; role?: string; gymId?: string };
   const gymSlug = String(formData.get("gymSlug") ?? "");
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
-  const userId = user.id ?? (session as any)?.user?.id;
+
+  const session = await auth();
+  const currentUser = session?.user as { role?: UserRole; gymId?: string } | undefined;
+  if (!currentUser) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const memberId = String(formData.get("memberId") ?? "");
-  const beltRaw = String(formData.get("belt") ?? "").trim();
-  const stripesRaw = String(formData.get("stripes") ?? "").trim();
+  const newRoleRaw = String(formData.get("newRole") ?? "").trim();
 
-  if (!gymSlug || !memberId) return;
-  if (!userId) {
-    redirect(`/${gymSlug}/admin/members/${memberId}?beltError=${encodeURIComponent("Session missing user id. Please sign in again.")}`);
-  }
+  if (!gymSlug || !memberId || !newRoleRaw) return;
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
     select: { id: true },
   });
-  if (!gym) notFound();
 
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+  if (!gym) {
+    notFound();
+  }
+
+  if (currentUser.role !== "PLATFORM_ADMIN" && currentUser.gymId !== gym.id) {
     redirect(`/${gymSlug}/login`);
   }
 
-  const member = await prisma.member.findFirst({
-    where: { id: memberId, gymId: gym.id },
-    select: { id: true, belt: true, stripes: true },
-  });
-  if (!member) notFound();
+  const editorRole = currentUser.role;
 
-  const newBelt: BeltRank | null = BELT_OPTIONS.includes(beltRaw as keyof typeof BeltRank)
-    ? (BeltRank[beltRaw as keyof typeof BeltRank] as BeltRank)
-    : null;
-  let newStripes: number | null = null;
-  if (stripesRaw !== "") {
-    const n = Number(stripesRaw);
-    if (!Number.isNaN(n) && n >= 0 && n <= 4) newStripes = n;
-  }
-
-  const prevBelt = member.belt;
-  const prevStripes = member.stripes;
-  const beltChanged = prevBelt !== newBelt || prevStripes !== newStripes;
-
-  if (!beltChanged) {
+  // Only users strictly above STAFF (LOCATION_ADMIN, GYM_ADMIN, PLATFORM_ADMIN) may edit roles.
+  if (!editorRole || !roleAtLeast(editorRole, "LOCATION_ADMIN")) {
     redirect(`/${gymSlug}/admin/members/${memberId}`);
   }
 
-  try {
-    await prisma.$transaction([
-      prisma.member.update({
-        where: { id: member.id },
-        data: { belt: newBelt, stripes: newStripes },
-      }),
-      prisma.memberBeltStripeLog.create({
-        data: {
-          previousBelt: prevBelt,
-          newBelt: newBelt,
-          previousStripes: prevStripes,
-          newStripes: newStripes,
-          member: {
-            connect: { id: member.id },
-          },
-          changedByUser: {
-            connect: { id: userId },
-          },
-        },
-      }),
-    ]);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  const validRoles: UserRole[] = [
+    "PLATFORM_ADMIN",
+    "GYM_ADMIN",
+    "LOCATION_ADMIN",
+    "STAFF",
+    "INSTRUCTOR",
+    "MEMBER",
+  ];
 
-    redirect(`/${gymSlug}/admin/members/${memberId}?beltError=${encodeURIComponent(message)}`);
+  const newRole = newRoleRaw as UserRole;
+  if (!validRoles.includes(newRole)) {
+    redirect(`/${gymSlug}/admin/members/${memberId}`);
   }
+
+  // Do not allow assigning a role higher than the editor's own role.
+  if (ROLE_RANK[newRole] > ROLE_RANK[editorRole]) {
+    redirect(`/${gymSlug}/admin/members/${memberId}`);
+  }
+
+  // Ensure the target user belongs to the specified member and gym.
+  const targetUser = await prisma.user.findFirst({
+    where: {
+      memberId,
+      gymId: gym.id,
+    },
+    select: { id: true },
+  });
+
+  if (!targetUser) {
+    redirect(`/${gymSlug}/admin/members/${memberId}`);
+  }
+
+  await prisma.user.update({
+    where: { id: targetUser.id },
+    data: { role: newRole },
+  });
 
   redirect(`/${gymSlug}/admin/members/${memberId}`);
 }
@@ -408,7 +395,9 @@ async function addSubscription(formData: FormData) {
 
   const plan = await prisma.membershipPlan.findFirst({
     where: { id: planId, gymId: gym.id },
-    select: { durationDays: true },
+    select: {
+      durationDays: true,
+    },
   });
 
   if (!plan) return;
@@ -482,6 +471,66 @@ async function cancelSubscription(formData: FormData) {
     data: {
       status: "CANCELLED",
       endsAt: cancelAt,
+      autoRenew: false,
+    },
+  });
+
+  redirect(`/${gymSlug}/admin/members/${memberId}`);
+}
+
+async function pickPlanForMember(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const user = session?.user as any;
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+
+  const memberId = String(formData.get("memberId") ?? "");
+  const planId = String(formData.get("planId") ?? "");
+
+  if (!gymSlug || !memberId || !planId) return;
+
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    select: { id: true },
+  });
+
+  if (!gym) {
+    notFound();
+  }
+
+  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+    redirect(`/${gymSlug}/login`);
+  }
+
+  const plan = await prisma.membershipPlan.findFirst({
+    where: { id: planId, gymId: gym.id },
+    select: {
+      id: true,
+      durationDays: true,
+    },
+  });
+
+  if (!plan) {
+    return;
+  }
+
+  const today = new Date();
+  const startsAt = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  const endsAt = new Date(
+    startsAt.getTime() + plan.durationDays * 24 * 60 * 60 * 1000,
+  );
+
+  await prisma.subscription.create({
+    data: {
+      memberId,
+      planId: plan.id,
+      startsAt,
+      endsAt,
+      status: "ACTIVE",
       autoRenew: false,
     },
   });
@@ -564,10 +613,6 @@ export default async function MemberDetailPage({
   const user = session?.user as any;
   if (!user) redirect(`/${gymSlug}/login`);
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const beltError =
-    typeof resolvedSearchParams.beltError === "string"
-      ? resolvedSearchParams.beltError
-      : null;
   const profileError =
     typeof resolvedSearchParams.profileError === "string"
       ? resolvedSearchParams.profileError
@@ -596,16 +641,16 @@ export default async function MemberDetailPage({
         gymId: gym.id,
       },
       include: {
+        user: {
+          select: {
+            role: true,
+          },
+        },
         subscriptions: {
           include: {
             plan: true,
           },
           orderBy: { createdAt: "desc" },
-        },
-        beltStripeLogs: {
-          orderBy: { changedAt: "desc" },
-          take: 50,
-          include: { changedByUser: { select: { name: true } } },
         },
         profileChangeLogs: {
           include: { changedByUser: { select: { name: true } } },
@@ -628,6 +673,19 @@ export default async function MemberDetailPage({
   const isProfileComplete = !!member.birthDate && !!member.phone;
   const hideMemberExtras = isMemberViewer && !isProfileComplete;
 
+  const now = new Date();
+  const activeSubscription =
+    member.subscriptions.find((sub) => {
+      return (
+        sub.status === "ACTIVE" &&
+        sub.startsAt <= now &&
+        sub.endsAt > now
+      );
+    }) ?? null;
+
+  const summarySubscription =
+    activeSubscription ?? member.subscriptions[0] ?? null;
+
   return (
     <div className="space-y-4">
       {hideMemberExtras && (
@@ -641,9 +699,6 @@ export default async function MemberDetailPage({
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-white/80">Profile</h2>
-          <span className="text-sm text-white/80 uppercase">
-            {member.status}
-          </span>
         </div>
         <MemberProfilePanel
           member={{
@@ -653,12 +708,13 @@ export default async function MemberDetailPage({
             email: member.email,
             phone: member.phone,
             birthDate: member.birthDate,
-            belt: member.belt,
-            stripes: member.stripes,
             status: member.status,
+            userRole: member.user?.role ?? null,
           }}
           gymSlug={gymSlug}
           updateAction={updateMemberProfile}
+          updateRoleAction={updateMemberUserRole}
+          currentUserRole={user.role}
           deleteAction={deleteMember}
           canDeleteMember={
             user.role === "PLATFORM_ADMIN" || user.role === "GYM_ADMIN"
@@ -672,177 +728,82 @@ export default async function MemberDetailPage({
 
       {!hideMemberExtras && (
         <section className="border border-white/10 rounded-xl p-4 space-y-3">
-          <h2 className="text-sm font-medium text-white/80">
-            Belt &amp; Stripes
-          </h2>
-          <MemberBeltPanel
-            member={{
-              id: member.id,
-              belt: member.belt,
-              stripes: member.stripes,
-            }}
-            gymSlug={gymSlug}
-            updateBeltStripesAction={updateBeltStripes}
-            beltStripeLogs={member.beltStripeLogs}
-            beltError={beltError}
-            canEdit={
-              user.role === "PLATFORM_ADMIN" || user.role === "GYM_ADMIN"
-            }
-          />
-        </section>
-      )}
-
-      {!hideMemberExtras && (
-        <section className="border border-white/10 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-white/80">Plans</h2>
+            <h2 className="text-sm font-medium text-white/80">Plan</h2>
           </div>
 
-          {plans.length > 0 && (
-          <details className="border border-white/10 rounded-md p-3 text-xs space-y-2">
-            <summary className="cursor-pointer list-none flex items-center justify-between">
-              <span className="font-medium text-white/80">Add plan</span>
-              <span className="text-[11px] text-white/60">
-                Click to assign a plan to this member
-              </span>
-            </summary>
+          {summarySubscription && (
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="flex flex-col gap-2 border border-white/15 rounded-xl p-4 bg-black/40 min-h-[160px]">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <span className="font-medium">
+                    {summarySubscription.plan?.name ?? "Unknown plan"}
+                  </span>
+                  <span className="text-[11px] text-white/60 uppercase">
+                    {summarySubscription.status}
+                  </span>
+                </div>
+                <div className="mt-1 space-y-0.5 text-[11px] text-white/60">
+                  <div>
+                    {summarySubscription.plan?.billingKind === "ONE_TIME"
+                      ? "One-time"
+                      : summarySubscription.plan?.billingInterval === "DAY"
+                      ? "Daily subscription"
+                      : summarySubscription.plan?.billingInterval === "WEEK"
+                      ? "Weekly subscription"
+                      : summarySubscription.plan?.billingInterval === "YEAR"
+                      ? "Yearly subscription"
+                      : "Monthly subscription"}
+                  </div>
+                  <div>
+                    {summarySubscription.plan?.usageKind === "UNLIMITED"
+                      ? "Unlimited"
+                      : summarySubscription.plan?.creditsPerPeriod != null &&
+                        summarySubscription.plan?.creditsPeriodUnit != null
+                      ? (() => {
+                          const unit =
+                            summarySubscription.plan!.creditsPeriodUnit ===
+                            "DAY"
+                              ? "day"
+                              : summarySubscription.plan!.creditsPeriodUnit ===
+                                "WEEK"
+                              ? "week"
+                              : summarySubscription.plan!.creditsPeriodUnit ===
+                                "MONTH"
+                              ? "month"
+                              : summarySubscription.plan!.creditsPeriodUnit ===
+                                "YEAR"
+                              ? "year"
+                              : "total";
+                          if (
+                            summarySubscription.plan!.creditsPeriodUnit ===
+                            "NONE"
+                          ) {
+                            return `${summarySubscription.plan!.creditsPerPeriod} classes total`;
+                          }
+                          return `${summarySubscription.plan!.creditsPerPeriod} classes/${unit}`;
+                        })()
+                      : "Limited credits"}
+                  </div>
+                  {summarySubscription.plan?.priceCents != null && (
+                    <div>
+                      €
+                      {(summarySubscription.plan.priceCents / 100).toFixed(2)}
+                    </div>
+                  )}
+                </div>
 
-            <form
-              action={addSubscription}
-              className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
-            >
-              <input type="hidden" name="gymSlug" value={gymSlug} />
-              <input type="hidden" name="memberId" value={member.id} />
-
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="planId"
-                  className="text-xs font-medium text-white/80"
-                >
-                  Plan
-                </label>
-                <select
-                  id="planId"
-                  name="planId"
-                  required
-                  className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
-                >
-                  <option value="">Select plan…</option>
-                  {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="startDate"
-                  className="text-xs font-medium text-white/80"
-                >
-                  Start date
-                </label>
-                <input
-                  id="startDate"
-                  name="startDate"
-                  type="date"
-                  required
-                  className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="autoRenew"
-                  className="text-xs font-medium text-white/80"
-                >
-                  Auto renew
-                </label>
-                <select
-                  id="autoRenew"
-                  name="autoRenew"
-                  defaultValue="no"
-                  className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
-                >
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </div>
-
-              <div className="flex">
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-orange-600 text-[11px] font-medium hover:bg-orange-500 transition-colors w-full md:w-auto"
-                >
-                  Add plan
-                </button>
-              </div>
-            </form>
-          </details>
-        )}
-
-        {member.subscriptions.length === 0 ? (
-          <p className="text-sm text-white/60">
-            This member has no plans yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto border border-white/10 rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/5">
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Plan
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Status
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Starts
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Ends
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Auto-renew
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {member.subscriptions.map((sub) => {
-                  const starts = new Date(sub.startsAt).toLocaleDateString();
-                  const ends = new Date(sub.endsAt).toLocaleDateString();
-                  return (
-                    <tr
-                      key={sub.id}
-                      className="border-b border-white/5 hover:bg-white/5 align-top"
-                    >
-                      <td className="px-3 py-2 text-xs text-white/90">
-                        {sub.plan?.name ?? "Unknown plan"}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-white/80">
-                        {sub.status}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-white/80">
-                        {starts}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-white/80">
-                        {ends}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-white/80">
-                        {sub.autoRenew ? "Yes" : "No"}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-white/80">
-                        <details className="space-y-2">
-                          <summary className="cursor-pointer text-orange-400 hover:text-orange-300">
+                <div className="mt-auto flex justify-end">
+                  <div className="flex flex-col items-end gap-1 text-[11px]">
+                    {activeSubscription &&
+                      activeSubscription.id === summarySubscription.id && (
+                        <details className="text-right">
+                          <summary className="cursor-pointer text-orange-400 hover:text-orange-300 list-none">
                             Cancel plan
                           </summary>
                           <form
                             action={cancelSubscription}
-                            className="mt-1 flex flex-col gap-2"
+                            className="mt-1 flex flex-col items-end gap-1"
                           >
                             <input
                               type="hidden"
@@ -857,22 +818,18 @@ export default async function MemberDetailPage({
                             <input
                               type="hidden"
                               name="subscriptionId"
-                              value={sub.id}
+                              value={activeSubscription.id}
                             />
-                            <div className="flex flex-col gap-1">
-                              <label
-                                htmlFor={`cancelDate-${sub.id}`}
-                                className="text-[11px] font-medium text-white/80"
-                              >
+                            <div className="flex flex-col gap-1 items-end">
+                              <label className="text-[10px] font-medium text-white/80">
                                 Cancellation date
+                                <input
+                                  name="cancelDate"
+                                  type="date"
+                                  required
+                                  className="mt-1 px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-red-500 text-[11px]"
+                                />
                               </label>
-                              <input
-                                id={`cancelDate-${sub.id}`}
-                                name="cancelDate"
-                                type="date"
-                                required
-                                className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-red-500 text-[11px]"
-                              />
                             </div>
                             <button
                               type="submit"
@@ -882,15 +839,30 @@ export default async function MemberDetailPage({
                             </button>
                           </form>
                         </details>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                      )}
+                    <Link
+                      href={`/${gymSlug}/admin/members/${member.id}/change-plan`}
+                      className="text-orange-400 hover:text-orange-300"
+                    >
+                      Change plan
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {member.subscriptions.length === 0 && plans.length > 0 && (
+            <div className="mt-4">
+              <MemberPlanChooser
+                plans={plans as any}
+                gymSlug={gymSlug}
+                memberId={member.id}
+                pickPlanAction={pickPlanForMember}
+              />
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

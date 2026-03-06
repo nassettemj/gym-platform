@@ -9,20 +9,22 @@ type Member = {
   email: string | null;
   phone: string | null;
   birthDate: Date | null;
-  belt: string | null;
-  stripes: number | null;
   status: string;
+  userRole: string | null;
 };
 
 type Props = {
   member: Member;
   gymSlug: string;
   updateAction: (formData: FormData) => void;
+  updateRoleAction?: (formData: FormData) => void;
   deleteAction?: (formData: FormData) => void;
   /** When true, show delete member button (platform or gym admin only). */
   canDeleteMember?: boolean;
   /** When true, show edit controls for name and email (platform or gym admin only). */
   canEditProfile?: boolean;
+  /** Current viewer's role (UserRole string) for role visibility/editing. */
+  currentUserRole?: string;
   /** Optional validation error for profile fields (birthday / phone / email). */
   profileError?: string | null;
 };
@@ -32,15 +34,18 @@ type EditingField =
   | "email"
   | "phone"
   | "birthDate"
+  | "role"
   | null;
 
 export function MemberProfilePanel({
   member,
   gymSlug,
   updateAction,
+  updateRoleAction,
   deleteAction,
   canDeleteMember,
   canEditProfile,
+  currentUserRole,
   profileError,
 }: Props) {
   const [editingField, setEditingField] = useState<EditingField>(null);
@@ -51,6 +56,35 @@ export function MemberProfilePanel({
     : "";
 
   const fullName = `${member.firstName} ${member.lastName}`.trim();
+
+  const canSeeRole =
+    currentUserRole === "STAFF" ||
+    currentUserRole === "LOCATION_ADMIN" ||
+    currentUserRole === "GYM_ADMIN" ||
+    currentUserRole === "PLATFORM_ADMIN";
+
+  const canEditRole =
+    currentUserRole === "LOCATION_ADMIN" ||
+    currentUserRole === "GYM_ADMIN" ||
+    currentUserRole === "PLATFORM_ADMIN";
+
+  const ROLE_LABELS: Record<string, string> = {
+    PLATFORM_ADMIN: "Platform admin",
+    GYM_ADMIN: "Gym admin",
+    LOCATION_ADMIN: "Location admin",
+    STAFF: "Staff",
+    INSTRUCTOR: "Instructor",
+    MEMBER: "Member",
+  };
+
+  const ROLE_ORDER = [
+    "MEMBER",
+    "INSTRUCTOR",
+    "STAFF",
+    "LOCATION_ADMIN",
+    "GYM_ADMIN",
+    "PLATFORM_ADMIN",
+  ] as const;
 
   return (
     <div className="space-y-2 text-sm">
@@ -124,6 +158,78 @@ export function MemberProfilePanel({
           </>
         )}
       </div>
+
+      {/* Role (only visible to users above INSTRUCTOR) */}
+      {canSeeRole && (
+        <div className="flex items-center justify-between gap-3">
+          {editingField === "role" && canEditRole && updateRoleAction ? (
+            <form
+              action={updateRoleAction}
+              className="flex items-center gap-2 flex-1"
+            >
+              <input type="hidden" name="gymSlug" value={gymSlug} />
+              <input type="hidden" name="memberId" value={member.id} />
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs font-medium text-white/80">
+                  Role
+                </label>
+                <select
+                  name="newRole"
+                  defaultValue={member.userRole ?? "MEMBER"}
+                  className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                >
+                  {(() => {
+                    const idx = currentUserRole
+                      ? ROLE_ORDER.indexOf(
+                          currentUserRole as (typeof ROLE_ORDER)[number],
+                        )
+                      : -1;
+                    const allowed =
+                      idx >= 0 ? ROLE_ORDER.slice(0, idx + 1) : [];
+                    return allowed.map((role) => (
+                      <option key={role} value={role}>
+                        {ROLE_LABELS[role]}
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  className="px-2 py-1.5 rounded-md border border-white/20 text-[11px] hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-2 py-1.5 rounded-md bg-orange-600 text-[11px] font-medium hover:bg-orange-500"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="text-white/80">
+                <span className="font-semibold">Role:</span>{" "}
+                {member.userRole ? ROLE_LABELS[member.userRole] : "—"}
+              </p>
+              {canEditRole && (
+                <button
+                  type="button"
+                  onClick={() => setEditingField("role")}
+                  className="text-xs text-white/70 hover:text-white"
+                  aria-label="Edit role"
+                >
+                  ✎
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Date of birth */}
       <div className="flex items-center justify-between gap-3">

@@ -4,6 +4,24 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+const ROLE_LABELS: Record<string, string> = {
+  PLATFORM_ADMIN: "Platform admin",
+  GYM_ADMIN: "Gym admin",
+  LOCATION_ADMIN: "Location admin",
+  STAFF: "Staff",
+  INSTRUCTOR: "Instructor",
+  MEMBER: "Member",
+};
+
+const ROLE_ORDER = [
+  "MEMBER",
+  "INSTRUCTOR",
+  "STAFF",
+  "LOCATION_ADMIN",
+  "GYM_ADMIN",
+  "PLATFORM_ADMIN",
+] as const;
+
 type MemberRow = {
   id: string;
   firstName: string;
@@ -11,21 +29,49 @@ type MemberRow = {
   email: string | null;
   phone: string | null;
   memberType: "ADULT" | "CHILD";
-  createdAt: string; // ISO string
+  createdAt: string; // ISO string (kept for potential future use)
+  userId: string | null;
+  userRole:
+    | "PLATFORM_ADMIN"
+    | "GYM_ADMIN"
+    | "LOCATION_ADMIN"
+    | "STAFF"
+    | "INSTRUCTOR"
+    | "MEMBER"
+    | null;
+  status: string;
+  planName: string | null;
 };
 
 type Props = {
   members: MemberRow[];
+  currentUserRole?: string;
 };
 
-export function MembersTable({ members }: Props) {
+export function MembersTable({
+  members,
+  currentUserRole,
+}: Props) {
   const params = useParams<{ gymSlug: string }>();
   const gymSlug = params.gymSlug;
 
   const [search, setSearch] = useState("");
   const [ageFilter, setAgeFilter] = useState<"ALL" | "ADULT" | "CHILD">("ALL");
-  const [dateFilterMode, setDateFilterMode] = useState<"none" | "before" | "after">("none");
-  const [dateFilterValue, setDateFilterValue] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">(
+    "ALL",
+  );
+  const [planFilter, setPlanFilter] = useState<string>("ALL");
+
+  const canSeeRoleColumn =
+    currentUserRole === "STAFF" ||
+    currentUserRole === "LOCATION_ADMIN" ||
+    currentUserRole === "GYM_ADMIN" ||
+    currentUserRole === "PLATFORM_ADMIN";
+
+  const canEditRoles =
+    false;
+
+  const emptyStateColSpan = canSeeRoleColumn ? 5 : 4;
 
   const filtered = useMemo(() => {
     return members.filter((m) => {
@@ -37,22 +83,29 @@ export function MembersTable({ members }: Props) {
       const matchesAge =
         ageFilter === "ALL" ? true : m.memberType === ageFilter;
 
-      let matchesDate = true;
-      if (dateFilterMode !== "none" && dateFilterValue) {
-        const memberDate = new Date(m.createdAt);
-        const filterDate = new Date(dateFilterValue);
-        filterDate.setHours(0, 0, 0, 0);
+      const matchesStatus =
+        statusFilter === "ALL" ? true : m.status === statusFilter;
 
-        if (dateFilterMode === "before") {
-          matchesDate = memberDate < filterDate;
-        } else if (dateFilterMode === "after") {
-          matchesDate = memberDate > filterDate;
-        }
-      }
+      const matchesPlan =
+        planFilter === "ALL"
+          ? true
+          : planFilter === "NONE"
+          ? m.planName === null
+          : m.planName === planFilter;
 
-      return matchesSearch && matchesAge && matchesDate;
+      return matchesSearch && matchesAge && matchesStatus && matchesPlan;
     });
-  }, [members, search, ageFilter, dateFilterMode, dateFilterValue]);
+  }, [members, search, ageFilter, statusFilter, planFilter]);
+
+  const availablePlanOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const m of members) {
+      if (m.planName) {
+        names.add(m.planName);
+      }
+    }
+    return Array.from(names).sort();
+  }, [members]);
 
   return (
     <div className="space-y-2">
@@ -88,39 +141,54 @@ export function MembersTable({ members }: Props) {
                   </select>
                 </div>
               </th>
-              <th className="px-3 py-2 text-left align-bottom w-1/3">
+              <th className="px-3 py-2 text-left align-bottom w-28">
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold">Member since</span>
-                  <div className="flex gap-1 items-center">
-                    <select
-                      value={dateFilterMode}
-                      onChange={(e) =>
-                        setDateFilterMode(
-                          e.target.value as "none" | "before" | "after"
-                        )
-                      }
-                      className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
-                    >
-                      <option value="none">Any</option>
-                      <option value="before">Before</option>
-                      <option value="after">After</option>
-                    </select>
-                    <input
-                      type="date"
-                      value={dateFilterValue}
-                      onChange={(e) => setDateFilterValue(e.target.value)}
-                      className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
-                    />
-                  </div>
+                  <span className="text-xs font-semibold">Status</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) =>
+                      setStatusFilter(
+                        e.target.value as "ALL" | "ACTIVE" | "INACTIVE",
+                      )
+                    }
+                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
+                  >
+                    <option value="ALL">All</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
                 </div>
               </th>
+              <th className="px-3 py-2 text-left align-bottom w-40">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold">Plan</span>
+                  <select
+                    value={planFilter}
+                    onChange={(e) => setPlanFilter(e.target.value)}
+                    className="px-2 py-1 rounded-md bg-black/40 border border-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500 text-xs"
+                  >
+                    <option value="ALL">All</option>
+                    <option value="NONE">No plan</option>
+                    {availablePlanOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </th>
+              {canSeeRoleColumn && (
+                <th className="px-3 py-2 text-left align-bottom w-40">
+                  <span className="text-xs font-semibold">Role</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={3}
+                  colSpan={emptyStateColSpan}
                   className="px-3 py-3 text-xs text-white/60 text-center"
                 >
                   No members match the current filters.
@@ -128,7 +196,6 @@ export function MembersTable({ members }: Props) {
               </tr>
             ) : (
               filtered.map((m) => {
-                const created = new Date(m.createdAt).toLocaleDateString();
                 return (
                   <tr
                     key={m.id}
@@ -146,8 +213,18 @@ export function MembersTable({ members }: Props) {
                       {m.memberType === "ADULT" ? "Adult" : "Child"}
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-white/80">
-                      {created}
+                      {m.status === "ACTIVE" ? "Active" : "Inactive"}
                     </td>
+                    <td className="px-3 py-2 align-top text-xs text-white/80">
+                      {m.planName ?? "—"}
+                    </td>
+                    {canSeeRoleColumn && (
+                      <td className="px-3 py-2 align-top text-xs text-white/80">
+                        <span className="text-white/80">
+                          {m.userRole ? ROLE_LABELS[m.userRole] : "—"}
+                        </span>
+                      </td>
+                    )}
                   </tr>
                 );
               })

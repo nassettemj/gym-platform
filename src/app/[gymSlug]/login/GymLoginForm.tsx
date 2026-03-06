@@ -1,27 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { loginWithSlug } from "./actions";
+import { useState, type FormEvent } from "react";
+import { signIn } from "next-auth/react";
 
 interface GymLoginFormProps {
   gymSlug: string;
 }
 
 export function GymLoginForm({ gymSlug }: GymLoginFormProps) {
-  const [state, formAction] = useActionState(
-    loginWithSlug,
-    null as { error: string } | null,
-  );
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "").trim();
+
+    if (!email || !password) return;
+
+    const res = await signIn("credentials", {
+      email,
+      password,
+      gymSlug,
+      redirect: false,
+      callbackUrl: "/post-login",
+    });
+
+    if (res?.error) {
+      setError("Invalid email or password.");
+      return;
+    }
+
+    if (res?.url) {
+      window.location.href = res.url;
+    }
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      {state?.error && (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
         <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
-          {state.error}
+          {error}
         </p>
       )}
-      <input type="hidden" name="gymSlug" value={gymSlug} />
       <div className="flex flex-col gap-1">
         <label htmlFor="email" className="text-xs font-medium">
           Email

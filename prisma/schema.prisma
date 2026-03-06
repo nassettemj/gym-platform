@@ -81,6 +81,8 @@ model Member {
   firstName        String
   lastName         String
   email            String?
+  /// Stripe Customer ID for this member (cus_...)
+  stripeCustomerId String?
   phone            String?
   birthDate        DateTime?
   belt             BeltRank?
@@ -350,6 +352,7 @@ enum MemberType {
 
 enum SubscriptionStatus {
   ACTIVE
+  CHANGED
   EXPIRED
   CANCELLED
   PAUSED

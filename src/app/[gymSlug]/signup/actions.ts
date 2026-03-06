@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { signIn } from "@/auth";
 
 export type SignupState = { error?: string } | null;
 
@@ -73,26 +72,7 @@ export async function register(
     data: { memberId: newMember.id },
   });
 
-  let result;
-  try {
-    result = await signIn("credentials", {
-      email,
-      password,
-      gymSlug,
-      redirect: false,
-    });
-  } catch (err: unknown) {
-    const e = err as { name?: string };
-    if (e?.name === "CredentialsSignin") {
-      redirect(`/${gymSlug}/login`);
-    }
-    throw err;
-  }
-
-  if (!result) {
-    redirect(`/${gymSlug}/login`);
-  }
-
-  redirect(`/${gymSlug}/admin/members/${newMember.id}`);
+  // For now, do not auto-sign-in on signup; send the user to the login page.
+  redirect(`/${gymSlug}/login`);
 }
 

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { AdminNav } from "@/components/AdminNav";
 import { AdminBreadcrumbs } from "@/components/AdminBreadcrumbs";
 import { AdminHeaderUser } from "@/components/AdminHeaderUser";
+import { LogoutButton } from "@/components/LogoutButton";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -24,7 +25,13 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
             {user?.role !== "MEMBER" && <AdminBreadcrumbs gymSlug={gymSlug} />}
           </div>
           <div className="flex items-center gap-4">
-            {user && <AdminHeaderUser user={user} gymSlug={gymSlug} />}
+            {user && (
+              <AdminHeaderUser
+                user={user}
+                gymSlug={gymSlug}
+              />
+            )}
+            {user && <LogoutButton gymSlug={gymSlug} />}
             <AdminNav gymSlug={gymSlug} role={user?.role} />
           </div>
         </div>

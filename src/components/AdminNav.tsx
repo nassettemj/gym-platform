@@ -6,6 +6,15 @@ import Link from "next/link";
 export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) {
   const [open, setOpen] = useState(false);
   const isAdmin = role === "PLATFORM_ADMIN" || role === "GYM_ADMIN";
+  const canSeeMembers =
+    role === "PLATFORM_ADMIN" ||
+    role === "GYM_ADMIN" ||
+    role === "LOCATION_ADMIN" ||
+    role === "STAFF";
+  const canSeePlans =
+    role === "PLATFORM_ADMIN" ||
+    role === "GYM_ADMIN" ||
+    role === "LOCATION_ADMIN";
 
   return (
     <div className="relative">
@@ -30,7 +39,7 @@ export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) 
               Locations
             </Link>
           )}
-          {isAdmin && (
+          {canSeeMembers && (
             <Link
               href={`/${gymSlug}/admin/members`}
               className="block px-3 py-2 hover:bg-white/10"
@@ -39,13 +48,15 @@ export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) 
               Members
             </Link>
           )}
-          <Link
-            href={`/${gymSlug}/admin/plans`}
-            className="block px-3 py-2 hover:bg-white/10"
-            onClick={() => setOpen(false)}
-          >
-            Plans
-          </Link>
+          {canSeePlans && (
+            <Link
+              href={`/${gymSlug}/admin/plans`}
+              className="block px-3 py-2 hover:bg-white/10"
+              onClick={() => setOpen(false)}
+            >
+              Plans
+            </Link>
+          )}
           <Link
             href={`/${gymSlug}/admin/schedule`}
             className="block px-3 py-2 hover:bg-white/10"

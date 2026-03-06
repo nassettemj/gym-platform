@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { GymMemberFormToggle } from "@/components/GymMemberFormToggle";
 import { MembersTable } from "@/components/MembersTable";
+import type { UserRole } from "@prisma/client";
 
 interface MembersPageProps {
   params: Promise<{
@@ -79,6 +80,30 @@ export default async function MembersPage({ params }: MembersPageProps) {
     include: {
       members: {
         orderBy: { createdAt: "asc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              role: true,
+            },
+          },
+          subscriptions: {
+            where: {
+              status: "ACTIVE",
+            },
+            include: {
+              plan: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 1,
+          },
+        },
       },
     },
   });
@@ -87,8 +112,17 @@ export default async function MembersPage({ params }: MembersPageProps) {
     notFound();
   }
 
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
+  if (user.role !== "PLATFORM_ADMIN") {
+    if (user.gymId !== gym.id) {
+      redirect(`/${gymSlug}/login`);
+    }
+    if (
+      user.role !== "STAFF" &&
+      user.role !== "LOCATION_ADMIN" &&
+      user.role !== "GYM_ADMIN"
+    ) {
+      redirect(`/${gymSlug}/login`);
+    }
   }
 
   const memberCount = gym.members.length;
@@ -107,6 +141,10 @@ export default async function MembersPage({ params }: MembersPageProps) {
     phone: m.phone,
     memberType: m.memberType as "ADULT" | "CHILD",
     createdAt: m.createdAt.toISOString(),
+    userId: m.user?.id ?? null,
+    userRole: m.user?.role ?? null,
+    status: m.status,
+    planName: m.subscriptions[0]?.plan?.name ?? null,
   }));
 
   return (
@@ -125,7 +163,10 @@ export default async function MembersPage({ params }: MembersPageProps) {
         </div>
 
         <div className="pt-2 border-t border-white/10">
-          <MembersTable members={memberRows} />
+          <MembersTable
+            members={memberRows}
+            currentUserRole={user.role as UserRole | undefined}
+          />
         </div>
       </section>
     </div>
