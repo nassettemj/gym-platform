@@ -2,16 +2,16 @@
   "name": "gym-platform",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "seed": "npx tsx scripts/seed.ts"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "studio": "prisma studio",
-    "seed": "npx tsx scripts/seed-full.ts",
-    "seed:classes": "npx tsx scripts/seed-classes.ts",
-    "seed:classes-v2": "npx tsx scripts/seed-classes-v2.ts",
-    "seed:reset": "npx tsx scripts/seed-reset.ts"
+    "seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
     "@next/eslint-plugin-next": "^15.5.7",
