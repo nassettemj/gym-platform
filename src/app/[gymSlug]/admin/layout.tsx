@@ -32,7 +32,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
               />
             )}
             {user && <LogoutButton gymSlug={gymSlug} />}
-            <AdminNav gymSlug={gymSlug} role={user?.role} />
+            <AdminNav gymSlug={gymSlug} role={user?.role} memberId={user?.memberId} />
           </div>
         </div>
       </header>

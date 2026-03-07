@@ -15,6 +15,7 @@ interface LoginFormProps {
 const enableDevLogin = process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === "true";
 
 export function LoginForm({ gyms }: LoginFormProps) {
+  const gymList = gyms ?? [];
   const [error, setError] = useState<string | null>(null);
   const [isLocalhost, setIsLocalhost] = useState(false);
 
@@ -36,14 +37,16 @@ export function LoginForm({ gyms }: LoginFormProps) {
     const devGymSlug = String(formData.get("devGymSlug") ?? "").trim();
     const devRole = String(formData.get("devRole") ?? "admin").trim();
 
-    // Dev-only: empty form → quick login as selected gym admin, instructor, or member
+    // Dev-only: empty form → quick login as selected gym role (admin, location_admin, staff, instructor, member)
     if (showDevTools && !email && !password && devGymSlug) {
-      email =
-        devRole === "member"
-          ? "__dev_member__"
-          : devRole === "instructor"
-            ? "__dev_instructor__"
-            : "__dev_admin__";
+      const roleToEmail: Record<string, string> = {
+        admin: "__dev_admin__",
+        location_admin: "__dev_location_admin__",
+        staff: "__dev_staff__",
+        instructor: "__dev_instructor__",
+        member: "__dev_member__",
+      };
+      email = roleToEmail[devRole] ?? "__dev_admin__";
       password = "__dev__";
     } else if (showDevTools && email.toLowerCase() === "sup") {
       password = password || "__dev__";
@@ -53,6 +56,8 @@ export function LoginForm({ gyms }: LoginFormProps) {
 
     const isDevQuickLogin =
       email === "__dev_admin__" ||
+      email === "__dev_location_admin__" ||
+      email === "__dev_staff__" ||
       email === "__dev_instructor__" ||
       email === "__dev_member__";
 
@@ -85,7 +90,7 @@ export function LoginForm({ gyms }: LoginFormProps) {
       {showDevTools && (
         <div className="space-y-3 pb-3 border-b border-white/10">
           <p className="text-xs font-medium text-white/70">Quick login (dev)</p>
-          {gyms.length > 0 ? (
+          {gymList.length > 0 ? (
             <>
               <div className="flex gap-2">
                 <select
@@ -94,7 +99,7 @@ export function LoginForm({ gyms }: LoginFormProps) {
                   className="flex-1 px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
                 >
                   <option value="">Select gym…</option>
-                  {gyms.map((g) => (
+                  {gymList.map((g) => (
                     <option key={g.slug} value={g.slug}>
                       {g.name}
                     </option>
@@ -105,12 +110,14 @@ export function LoginForm({ gyms }: LoginFormProps) {
                   className="flex-1 px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
                 >
                   <option value="admin">Admin</option>
+                  <option value="location_admin">Location admin</option>
+                  <option value="staff">Staff</option>
                   <option value="instructor">Instructor</option>
                   <option value="member">Member</option>
                 </select>
               </div>
               <p className="text-xs text-white/50">
-                Select gym + role (admin/instructor/member), leave email/password empty, then Sign in
+                Select gym + role, leave email/password empty, then Sign in. Use email <strong>sup</strong> for platform admin.
               </p>
             </>
           ) : (

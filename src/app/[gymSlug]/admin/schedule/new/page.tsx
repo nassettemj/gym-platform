@@ -127,6 +127,7 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
               name="subCategory"
               className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
               defaultValue=""
+              required
             >
               <option value="" disabled>
                 Select

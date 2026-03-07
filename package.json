@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "studio": "prisma studio",
+    "db:reset": "prisma migrate reset",
     "seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {

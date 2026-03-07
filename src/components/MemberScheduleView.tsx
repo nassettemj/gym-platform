@@ -56,6 +56,16 @@ function formatTime(iso: string | null | undefined): string {
   });
 }
 
+/** Green (empty) → red (full) based on attendance/capacity ratio 0..1 */
+function attendanceColor(attended: number, capacity: number): string {
+  if (capacity <= 0) return "rgb(34, 197, 94)";
+  const ratio = Math.min(1, Math.max(0, attended / capacity));
+  const r = Math.round(34 + (239 - 34) * ratio);
+  const g = Math.round(197 + (68 - 197) * ratio);
+  const b = Math.round(94 + (68 - 94) * ratio);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 export function MemberScheduleView({
   classes,
   gymSlug,
@@ -461,12 +471,13 @@ export function MemberScheduleView({
             <div className={compact ? "text-[9px] text-white/70" : "text-[10px] text-white/70"}>{c.instructorName}</div>
           )}
         </div>
-        {attendanceLabel != null && (
+        {attendanceLabel != null && capacity != null && (
           <Link
             href={`/${gymSlug}/admin/schedule/${c.id}`}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
             data-attendance-link
-            className="absolute bottom-1 right-1 text-[9px] text-white/60 hover:text-white/90 hover:underline"
+            className="absolute bottom-1 right-1 text-[9px] font-medium hover:underline"
+            style={{ color: attendanceColor(signupCount, capacity) }}
           >
             {attendanceLabel}
           </Link>

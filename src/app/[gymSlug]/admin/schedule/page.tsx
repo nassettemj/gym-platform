@@ -76,7 +76,8 @@ export async function createClass(formData: FormData) {
     !timeStr ||
     !durationMinutes ||
     !capacityRaw ||
-    !mainCategory
+    !mainCategory ||
+    !subCategory
   ) {
     return;
   }
@@ -122,8 +123,8 @@ export async function createClass(formData: FormData) {
     topic,
     startAt,
     endAt,
-    mainCategory: mainCategory ? (mainCategory as any) : null,
-    subCategory: subCategory ? (subCategory as any) : null,
+    mainCategory: mainCategory as any,
+    subCategory: subCategory as any,
     age,
   });
 
@@ -197,8 +198,8 @@ export async function createClass(formData: FormData) {
           topic,
           startAt: candidateStart,
           endAt: candidateEnd,
-          mainCategory: mainCategory ? (mainCategory as any) : null,
-          subCategory: subCategory ? (subCategory as any) : null,
+          mainCategory: mainCategory as any,
+          subCategory: subCategory as any,
           age,
         });
       }
@@ -278,6 +279,10 @@ async function updateClass(formData: FormData) {
   const startTime = timeStr;
   const endTime = new Date(endAt.getTime()).toISOString().slice(11, 16);
 
+  if (!mainCategory || !subCategory) {
+    redirect(`/${gymSlug}/admin/schedule?view=${viewMode}`);
+  }
+
   try {
     await prisma.class.update({
       where: { id: classId },
@@ -293,8 +298,8 @@ async function updateClass(formData: FormData) {
         topic: topic ?? undefined,
         startAt,
         endAt,
-        mainCategory: mainCategory ? (mainCategory as any) : null,
-        subCategory: subCategory ? (subCategory as any) : null,
+        mainCategory: mainCategory as any,
+        subCategory: subCategory as any,
         age: age ?? undefined,
       },
     });
@@ -381,18 +386,12 @@ export async function bulkUpdateClasses(formData: FormData) {
         }
       }
 
-      if (payload.mainCategory) {
-        data.mainCategory =
-          payload.mainCategory.kind === "clear"
-            ? null
-            : payload.mainCategory.value ?? null;
+      if (payload.mainCategory && payload.mainCategory.kind === "set" && payload.mainCategory.value) {
+        data.mainCategory = payload.mainCategory.value;
       }
 
-      if (payload.subCategory) {
-        data.subCategory =
-          payload.subCategory.kind === "clear"
-            ? null
-            : payload.subCategory.value ?? null;
+      if (payload.subCategory && payload.subCategory.kind === "set" && payload.subCategory.value) {
+        data.subCategory = payload.subCategory.value;
       }
 
       if (Object.keys(data).length > 0) {
@@ -458,7 +457,8 @@ export async function bulkCreateOnDates(formData: FormData) {
     !durationMinutes ||
     !dateKeys.length ||
     !capacityRaw ||
-    !mainCategory
+    !mainCategory ||
+    !subCategory
   ) {
     redirect(`/${gymSlug}/admin/schedule`);
   }
@@ -483,8 +483,8 @@ export async function bulkCreateOnDates(formData: FormData) {
       topic,
       startAt,
       endAt,
-      mainCategory: mainCategory ? (mainCategory as any) : null,
-      subCategory: subCategory ? (subCategory as any) : null,
+      mainCategory: mainCategory as any,
+      subCategory: subCategory as any,
       age,
     };
   });
@@ -577,7 +577,7 @@ export default async function SchedulePage({
     guestNames: c.guestNames ?? [],
     topic: c.topic ?? null,
     mainCategory: c.mainCategory ?? null,
-    subCategory: c.subCategory ?? null,
+    subCategory: c.subCategory,
     age: c.age ?? null,
   }));
 

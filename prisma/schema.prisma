@@ -188,10 +188,10 @@ model Class {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   endAt        DateTime?
-  mainCategory ClassMainCategory?
+  mainCategory ClassMainCategory
   /// Concrete instance timing for calendar and history.
   startAt      DateTime?
-  subCategory  ClassSubCategory?
+  subCategory  ClassSubCategory
   /// When the instructor confirmed taking attendance.
   attendanceConfirmedAt DateTime?
   checkIns     CheckIn[]

@@ -245,23 +245,17 @@ export function ScheduleView({
       }
     }
 
-    if (bulkState.changeMainCategory) {
+    if (bulkState.changeMainCategory && bulkState.mainCategoryMode === "set" && bulkState.mainCategoryValue) {
       payload.mainCategory = {
-        kind: bulkState.mainCategoryMode,
-        value:
-          bulkState.mainCategoryMode === "set"
-            ? (bulkState.mainCategoryValue || undefined)
-            : undefined,
+        kind: "set" as const,
+        value: bulkState.mainCategoryValue,
       };
     }
 
-    if (bulkState.changeSubCategory) {
+    if (bulkState.changeSubCategory && bulkState.subCategoryMode === "set" && bulkState.subCategoryValue) {
       payload.subCategory = {
-        kind: bulkState.subCategoryMode,
-        value:
-          bulkState.subCategoryMode === "set"
-            ? (bulkState.subCategoryValue || undefined)
-            : undefined,
+        kind: "set" as const,
+        value: bulkState.subCategoryValue,
       };
     }
 
@@ -1294,6 +1288,7 @@ export function ScheduleView({
                     name="subCategory"
                     defaultValue={selectedClass.subCategory ?? ""}
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                    required
                   >
                     <option value="">Select</option>
                     <option value="STAND_UP">Stand-up</option>
@@ -1517,17 +1512,6 @@ export function ScheduleView({
                 {bulkState.changeMainCategory && (
                   <div className="pl-5 space-y-2 text-xs">
                     <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        className="h-3 w-3"
-                        checked={bulkState.mainCategoryMode === "set"}
-                        onChange={() =>
-                          setBulkState((s) => ({
-                            ...s,
-                            mainCategoryMode: "set",
-                          }))
-                        }
-                      />
                       <span>Set category to</span>
                     </label>
                     <select
@@ -1539,7 +1523,6 @@ export function ScheduleView({
                           mainCategoryValue: e.target.value as any,
                         }))
                       }
-                      disabled={bulkState.mainCategoryMode !== "set"}
                     >
                       <option value="">Select</option>
                       <option value="OPEN_MAT">Open Mat</option>
@@ -1549,20 +1532,6 @@ export function ScheduleView({
                       <option value="SEMINAR">Seminar</option>
                       <option value="GRADUATION">Graduation</option>
                     </select>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        className="h-3 w-3"
-                        checked={bulkState.mainCategoryMode === "clear"}
-                        onChange={() =>
-                          setBulkState((s) => ({
-                            ...s,
-                            mainCategoryMode: "clear",
-                          }))
-                        }
-                      />
-                      <span>Clear category</span>
-                    </label>
                   </div>
                 )}
               </div>
@@ -1586,17 +1555,6 @@ export function ScheduleView({
                 {bulkState.changeSubCategory && (
                   <div className="pl-5 space-y-2 text-xs">
                     <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        className="h-3 w-3"
-                        checked={bulkState.subCategoryMode === "set"}
-                        onChange={() =>
-                          setBulkState((s) => ({
-                            ...s,
-                            subCategoryMode: "set",
-                          }))
-                        }
-                      />
                       <span>Set sub category to</span>
                     </label>
                     <select
@@ -1608,7 +1566,6 @@ export function ScheduleView({
                           subCategoryValue: e.target.value as any,
                         }))
                       }
-                      disabled={bulkState.subCategoryMode !== "set"}
                     >
                       <option value="">Select</option>
                       <option value="STAND_UP">Stand-up</option>
@@ -1617,20 +1574,6 @@ export function ScheduleView({
                       <option value="ADVANCED">Advanced</option>
                       <option value="COMPETITION">Competition</option>
                     </select>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        className="h-3 w-3"
-                        checked={bulkState.subCategoryMode === "clear"}
-                        onChange={() =>
-                          setBulkState((s) => ({
-                            ...s,
-                            subCategoryMode: "clear",
-                          }))
-                        }
-                      />
-                      <span>Clear sub category</span>
-                    </label>
                   </div>
                 )}
               </div>
@@ -1878,6 +1821,7 @@ export function ScheduleView({
                   <select
                     name="subCategory"
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
+                    required
                   >
                     <option value="">Select</option>
                     <option value="STAND_UP">Stand-up</option>

@@ -74,6 +74,42 @@ export const authOptions: NextAuthOptions = {
               };
             }
           }
+          if (email === "__dev_location_admin__" && gymSlug) {
+            const user = await prisma.user.findFirst({
+              where: {
+                role: "LOCATION_ADMIN",
+                gym: { slug: gymSlug },
+              },
+            });
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                gymId: user.gymId,
+                memberId: user.memberId,
+              };
+            }
+          }
+          if (email === "__dev_staff__" && gymSlug) {
+            const user = await prisma.user.findFirst({
+              where: {
+                role: "STAFF",
+                gym: { slug: gymSlug },
+              },
+            });
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                gymId: user.gymId,
+                memberId: user.memberId,
+              };
+            }
+          }
           if (
             (email === "__dev_member__" || email === "__dev_random_member__") &&
             gymSlug

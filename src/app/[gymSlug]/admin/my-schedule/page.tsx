@@ -208,7 +208,6 @@ export default async function MySchedulePage({ params }: MySchedulePageProps) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">My schedule</h1>
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         {!member.birthDate && (
           <p className="text-xs text-white/60 mb-2">

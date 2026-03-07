@@ -4,7 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { roleAtLeast } from "@/lib/roles";
 
-export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) {
+export function AdminNav({
+  gymSlug,
+  role,
+  memberId,
+}: {
+  gymSlug: string;
+  role?: string;
+  memberId?: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const isAdmin = role === "PLATFORM_ADMIN" || role === "GYM_ADMIN";
   const canSeeMembers =
@@ -30,7 +38,19 @@ export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) 
         <span className="block h-0.5 w-4 rounded-full bg-white" />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-44 rounded-md border border-white/15 bg-black/90 shadow-lg text-sm">
+        <div
+          className="absolute right-0 z-[100] mt-2 w-44 rounded-md border border-white/15 shadow-lg text-sm"
+          style={{ backgroundColor: "#000" }}
+        >
+          {memberId && (
+            <Link
+              href={`/${gymSlug}/admin/members/${memberId}`}
+              className="block px-3 py-2 hover:bg-white/10"
+              onClick={() => setOpen(false)}
+            >
+              My Profile
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href={`/${gymSlug}/admin/locations`}
@@ -65,6 +85,15 @@ export function AdminNav({ gymSlug, role }: { gymSlug: string; role?: string }) 
               onClick={() => setOpen(false)}
             >
               Planning
+            </Link>
+          )}
+          {roleAtLeast(role as any, "INSTRUCTOR") && (
+            <Link
+              href={`/${gymSlug}/admin/reporting`}
+              className="block px-3 py-2 hover:bg-white/10"
+              onClick={() => setOpen(false)}
+            >
+              Reporting
             </Link>
           )}
           <Link

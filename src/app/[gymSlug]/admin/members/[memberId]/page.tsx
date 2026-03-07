@@ -3,11 +3,11 @@ import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { getAgeAt, canAttendClass } from "@/lib/age";
+import { getAgeAt } from "@/lib/age";
 import { MemberProfilePanel } from "@/components/MemberProfilePanel";
-import { MemberScheduleView } from "@/components/MemberScheduleView";
 import { MemberClassHistoryTable } from "@/components/MemberClassHistoryTable";
 import { MemberPlanChooser } from "@/components/MemberPlanChooser";
+import { MemberBeltStripesPanel } from "@/components/MemberBeltStripesPanel";
 import { UserRole } from "@prisma/client";
 import { ROLE_RANK, roleAtLeast } from "@/lib/roles";
 
@@ -247,6 +247,76 @@ async function updateMemberUserRole(formData: FormData) {
   });
 
   redirect(`/${gymSlug}/admin/members/${memberId}`);
+}
+
+const BELT_RANKS = ["WHITE", "BLUE", "PURPLE", "BROWN", "BLACK"] as const;
+
+export async function updateMemberBeltStripes(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const user = session?.user as any;
+  if (!user?.id) redirect("/login");
+
+  const gymSlug = String(formData.get("gymSlug") ?? "");
+  const memberId = String(formData.get("memberId") ?? "");
+  const beltRaw = String(formData.get("belt") ?? "").trim();
+  const stripesRaw = String(formData.get("stripes") ?? "").trim();
+
+  if (!gymSlug || !memberId) return;
+
+  const gym = await prisma.gym.findUnique({
+    where: { slug: gymSlug },
+    select: { id: true },
+  });
+  if (!gym) notFound();
+
+  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
+    redirect(`/${gymSlug}/login`);
+  }
+
+  if (!roleAtLeast(user.role, "STAFF")) {
+    redirect(`/${gymSlug}/admin/members/${memberId}`);
+  }
+
+  const member = await prisma.member.findFirst({
+    where: { id: memberId, gymId: gym.id },
+    select: { id: true, belt: true, stripes: true },
+  });
+  if (!member) notFound();
+
+  const newBelt =
+    beltRaw === "" || beltRaw === "UNRANKED"
+      ? null
+      : BELT_RANKS.includes(beltRaw as (typeof BELT_RANKS)[number])
+        ? (beltRaw as (typeof BELT_RANKS)[number])
+        : member.belt;
+  const stripesNum = stripesRaw === "" ? null : parseInt(stripesRaw, 10);
+  const newStripes =
+    stripesNum === null
+      ? null
+      : Number.isNaN(stripesNum) || stripesNum < 0 || stripesNum > 4
+        ? member.stripes
+        : stripesNum;
+
+  await prisma.$transaction([
+    prisma.member.update({
+      where: { id: member.id },
+      data: { belt: newBelt, stripes: newStripes },
+    }),
+    prisma.memberBeltStripeLog.create({
+      data: {
+        memberId: member.id,
+        changedByUserId: user.id,
+        previousBelt: member.belt,
+        newBelt: newBelt ?? undefined,
+        previousStripes: member.stripes,
+        newStripes: newStripes ?? undefined,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/${gymSlug}/admin/members/${memberId}`);
 }
 
 export async function createCheckIn(formData: FormData) {
@@ -811,11 +881,6 @@ export default async function MemberDetailPage({
   const isMemberViewer = user.role === "MEMBER";
   const isProfileComplete = !!member.birthDate && !!member.phone;
   const hideMemberExtras = isMemberViewer && !isProfileComplete;
-  const userIsStaffViewingOwnProfile =
-    user.memberId === member.id &&
-    ["GYM_ADMIN", "STAFF", "INSTRUCTOR", "LOCATION_ADMIN"].includes(
-      user.role ?? ""
-    );
 
   const now = new Date();
   const activeSubscription =
@@ -829,114 +894,6 @@ export default async function MemberDetailPage({
 
   const summarySubscription =
     activeSubscription ?? member.subscriptions[0] ?? null;
-
-  let scheduleClassItems: {
-    id: string;
-    name: string;
-    startAt: string;
-    endAt: string;
-    locationName: string;
-    instructorName: string;
-    guestNames: string[];
-    topic: string | null;
-    mainCategory: string | null;
-    subCategory: string | null;
-    age: "ALL_AGES" | "ADULT_17_PLUS" | "AGE_4_6" | "AGE_7_10" | "AGE_11_15" | null;
-    capacity: number | null;
-    signupCount: number;
-    instructorId: string | null;
-    instructorMemberId: string | null;
-    attendanceConfirmedAt: string | null;
-    attended: boolean;
-  }[] = [];
-  let checkedInClassIds: string[] = [];
-
-  const showSchedule =
-    (activeSubscription || userIsStaffViewingOwnProfile) && !hideMemberExtras;
-
-  if (showSchedule) {
-    const now = new Date();
-    const startWindow = new Date(now);
-    startWindow.setDate(startWindow.getDate() - 14);
-    const endWindow = new Date(now);
-    endWindow.setDate(endWindow.getDate() + 60);
-
-    const classes = await prisma.class.findMany({
-      where: {
-        gymId: gym.id,
-        OR: [
-          { startAt: { gte: startWindow, lte: endWindow } },
-          { startAt: null },
-        ],
-      },
-      include: {
-        instructor: true,
-        location: true,
-        _count: { select: { checkIns: true } },
-      },
-      orderBy: { startAt: "asc" },
-    });
-
-    const ageFiltered =
-      member.birthDate != null
-        ? classes.filter((c) =>
-            canAttendClass(
-              member.birthDate!,
-              c.age,
-              c.startAt ?? new Date(),
-            ),
-          )
-        : classes.filter((c) => !c.age || c.age === "ALL_AGES");
-
-    scheduleClassItems = ageFiltered.map((c) => ({
-      id: c.id,
-      name: c.name,
-      startAt: c.startAt?.toISOString() ?? "",
-      endAt: c.endAt?.toISOString() ?? "",
-      locationName: c.location?.name ?? "",
-      instructorName:
-        c.instructor?.name ??
-        (c.guestNames?.length
-          ? `Guests: ${c.guestNames.join(", ")}`
-          : ""),
-      guestNames: c.guestNames ?? [],
-      topic: c.topic ?? null,
-      mainCategory: c.mainCategory ?? null,
-      subCategory: c.subCategory ?? null,
-      age: c.age ?? null,
-      capacity: c.capacity ?? null,
-      signupCount: (c as { _count?: { checkIns: number } })._count?.checkIns ?? 0,
-      instructorId: c.instructor?.id ?? null,
-      instructorMemberId: c.instructor?.memberId ?? null,
-      attendanceConfirmedAt: c.attendanceConfirmedAt?.toISOString() ?? null,
-      attended: false,
-    }));
-
-    const classIds = scheduleClassItems.map((item) => item.id);
-    let checkInAttendedByClassId: Record<string, boolean> = {};
-    if (classIds.length > 0) {
-      const checkIns = await prisma.checkIn.findMany({
-        where: {
-          memberId: member.id,
-          classId: { in: classIds },
-        },
-        select: { classId: true, attended: true },
-      });
-      checkedInClassIds = checkIns
-        .map((ci) => ci.classId)
-        .filter((id): id is string => id != null);
-      for (const ci of checkIns) {
-        if (ci.classId) {
-          checkInAttendedByClassId[ci.classId] = ci.attended;
-        }
-      }
-    }
-
-    scheduleClassItems = scheduleClassItems.map((item) => ({
-      ...item,
-      attended: checkInAttendedByClassId[item.id] ?? false,
-    }));
-  }
 
   const showClassHistory =
     !hideMemberExtras &&
@@ -1100,6 +1057,22 @@ export default async function MemberDetailPage({
       {!hideMemberExtras && (
         <section className="border border-white/10 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-white/80">Belt & stripes</h2>
+          </div>
+          <MemberBeltStripesPanel
+            memberId={member.id}
+            gymSlug={gymSlug}
+            belt={member.belt ?? null}
+            stripes={member.stripes ?? null}
+            canEdit={roleAtLeast(user.role, "STAFF")}
+            updateAction={updateMemberBeltStripes}
+          />
+        </section>
+      )}
+
+      {!hideMemberExtras && (
+        <section className="border border-white/10 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-white/80">Plan</h2>
           </div>
 
@@ -1204,28 +1177,6 @@ export default async function MemberDetailPage({
               />
             </div>
           )}
-        </section>
-      )}
-
-      {showSchedule && (
-        <section className="border border-white/10 rounded-xl p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-white/80">Schedule</h2>
-          </div>
-          {!member.birthDate && (
-            <p className="text-xs text-white/60 mb-2">
-              Add your birth date to see classes suited to your age.
-            </p>
-          )}
-          <MemberScheduleView
-            classes={scheduleClassItems}
-            gymSlug={gymSlug}
-            memberId={member.id}
-            checkedInClassIds={checkedInClassIds}
-            signUpAction={createCheckIn}
-            unsignAction={deleteCheckIn}
-            initialViewMode="week"
-          />
         </section>
       )}
 
