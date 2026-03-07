@@ -2,7 +2,7 @@
  * Seed: 200 members, staff, weekly schedule, graduation seminars, attendance.
  * Run: npx tsx scripts/seed.ts
  */
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import type { ClassAge, ClassMainCategory } from "@prisma/client";
 
@@ -306,7 +306,7 @@ async function main() {
     }
   }
 
-  const classData: Parameters<typeof prisma.class.createMany>[0]["data"] = [];
+  const classData: Prisma.ClassCreateManyInput[] = [];
   let cursor = new Date(scheduleStart);
   while (cursor <= scheduleEnd) {
     for (const t of templates) {
