@@ -15,6 +15,7 @@ declare module "next/navigation" {
     prefetch: (href: string) => void;
   };
   export function usePathname(): string;
+  export function useSearchParams(): URLSearchParams;
 }
 
 declare module "next/link" {
