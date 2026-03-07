@@ -4,7 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import type { ClassAge } from "@prisma/client";
+import type { ClassAge, ClassMainCategory } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -268,7 +268,7 @@ async function main() {
   const giCount = 12;
   const noGiCount = 5;
   const otherCount = 28 - giCount - noGiCount;
-  const mainCategoryPool: (typeof MAIN_CATS_OTHER)[number][] = ["GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI"];
+  const mainCategoryPool: ClassMainCategory[] = ["GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI", "GI"];
   for (let i = 0; i < noGiCount; i++) mainCategoryPool.push("NO_GI");
   for (let i = 0; i < otherCount; i++) mainCategoryPool.push(MAIN_CATS_OTHER[randomInt(0, MAIN_CATS_OTHER.length - 1)]);
   const shuffledMain = mainCategoryPool.sort(() => Math.random() - 0.5);
