@@ -5,6 +5,8 @@ import { redirect, notFound } from "next/navigation";
 import { ScheduleView } from "@/components/ScheduleView";
 import type { BulkClassUpdatePayload } from "@/lib/scheduleBulkTypes";
 
+const INSTRUCTOR_AND_ABOVE = ["INSTRUCTOR", "STAFF", "LOCATION_ADMIN", "GYM_ADMIN", "PLATFORM_ADMIN"] as const;
+
 const VALID_CLASS_AGES = ["ALL_AGES", "ADULT_17_PLUS", "AGE_4_6", "AGE_7_10", "AGE_11_15"] as const;
 const GUESTS_INSTRUCTOR_VALUE = "__guests__";
 
@@ -70,6 +72,7 @@ export async function createClass(formData: FormData) {
   const hasLocations = gym.locations.length > 0;
   if (hasLocations && !locationId) return;
 
+  const isGraduation = mainCategory === "GRADUATION";
   if (
     !gymId ||
     !dateStr ||
@@ -77,7 +80,7 @@ export async function createClass(formData: FormData) {
     !durationMinutes ||
     !capacityRaw ||
     !mainCategory ||
-    !subCategory
+    (!isGraduation && !subCategory)
   ) {
     return;
   }
@@ -109,6 +112,8 @@ export async function createClass(formData: FormData) {
     age: ClassAge | null;
   }[] = [];
 
+  const resolvedSubCategory = isGraduation ? (subCategory || null) : subCategory;
+
   // Base occurrence from the primary date/time/duration
   occurrences.push({
     gymId,
@@ -124,7 +129,7 @@ export async function createClass(formData: FormData) {
     startAt,
     endAt,
     mainCategory: mainCategory as any,
-    subCategory: subCategory as any,
+    subCategory: resolvedSubCategory as any,
     age,
   });
 
@@ -199,7 +204,7 @@ export async function createClass(formData: FormData) {
           startAt: candidateStart,
           endAt: candidateEnd,
           mainCategory: mainCategory as any,
-          subCategory: subCategory as any,
+          subCategory: resolvedSubCategory as any,
           age,
         });
       }
@@ -279,9 +284,12 @@ async function updateClass(formData: FormData) {
   const startTime = timeStr;
   const endTime = new Date(endAt.getTime()).toISOString().slice(11, 16);
 
-  if (!mainCategory || !subCategory) {
+  const isGraduationUpdate = mainCategory === "GRADUATION";
+  if (!mainCategory || (!isGraduationUpdate && !subCategory)) {
     redirect(`/${gymSlug}/admin/schedule?view=${viewMode}`);
   }
+
+  const resolvedSubCategoryUpdate = isGraduationUpdate ? (subCategory || null) : subCategory;
 
   try {
     await prisma.class.update({
@@ -299,7 +307,7 @@ async function updateClass(formData: FormData) {
         startAt,
         endAt,
         mainCategory: mainCategory as any,
-        subCategory: subCategory as any,
+        subCategory: resolvedSubCategoryUpdate as any,
         age: age ?? undefined,
       },
     });
@@ -451,6 +459,7 @@ export async function bulkCreateOnDates(formData: FormData) {
   const hasLocations = gym.locations.length > 0;
   if (hasLocations && !locationId) redirect(`/${gymSlug}/admin/schedule`);
 
+  const isGraduationBulk = mainCategory === "GRADUATION";
   if (
     !gymId ||
     !timeStr ||
@@ -458,10 +467,12 @@ export async function bulkCreateOnDates(formData: FormData) {
     !dateKeys.length ||
     !capacityRaw ||
     !mainCategory ||
-    !subCategory
+    (!isGraduationBulk && !subCategory)
   ) {
     redirect(`/${gymSlug}/admin/schedule`);
   }
+
+  const resolvedSubCategoryBulk = isGraduationBulk ? (subCategory || null) : subCategory;
 
   const occurrences = dateKeys.map((dateStr) => {
     const startAt = new Date(`${dateStr}T${timeStr}:00`);
@@ -484,7 +495,7 @@ export async function bulkCreateOnDates(formData: FormData) {
       startAt,
       endAt,
       mainCategory: mainCategory as any,
-      subCategory: subCategory as any,
+      subCategory: resolvedSubCategoryBulk as any,
       age,
     };
   });
@@ -558,7 +569,43 @@ export default async function SchedulePage({
     name: loc.name,
   }));
 
-  const instructorsForSelect = gym.instructors.map((inst) => ({
+  // Ensure every user with INSTRUCTOR role or above (with a linked member) has an Instructor record for this gym so they can be set as class instructor
+  const usersInstructorAndAbove = await prisma.user.findMany({
+    where: {
+      gymId: gym.id,
+      role: { in: [...INSTRUCTOR_AND_ABOVE] },
+      memberId: { not: null },
+    },
+    include: { member: true },
+  });
+  for (const u of usersInstructorAndAbove) {
+    if (!u.memberId || !u.member) continue;
+    const existing = await prisma.instructor.findUnique({
+      where: { memberId: u.memberId },
+    });
+    if (existing) {
+      if (existing.gymId !== gym.id) continue; // instructor at another gym
+    } else {
+      const name =
+        [u.member.firstName, u.member.lastName].filter(Boolean).join(" ").trim() ||
+        u.name ||
+        u.email ||
+        "Instructor";
+      await prisma.instructor.create({
+        data: {
+          gymId: gym.id,
+          memberId: u.memberId,
+          name,
+        },
+      });
+    }
+  }
+
+  const allInstructors = await prisma.instructor.findMany({
+    where: { gymId: gym.id },
+    orderBy: { name: "asc" },
+  });
+  const instructorsForSelect = allInstructors.map((inst) => ({
     id: inst.id,
     name: inst.name,
   }));

@@ -18,6 +18,7 @@ model Gym {
   stripeCustomerId String?
   classes          Class[]
   events           Event[]
+  graduationLists  GraduationList[]
   customizations   GymCustomization?
   instructors      Instructor[]
   locations        Location[]
@@ -191,13 +192,26 @@ model Class {
   mainCategory ClassMainCategory
   /// Concrete instance timing for calendar and history.
   startAt      DateTime?
-  subCategory  ClassSubCategory
+  subCategory  ClassSubCategory?
   /// When the instructor confirmed taking attendance.
   attendanceConfirmedAt DateTime?
-  checkIns     CheckIn[]
-  gym          Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  instructor   Instructor?        @relation(fields: [instructorId], references: [id])
-  location     Location?          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  checkIns         CheckIn[]
+  graduationList   GraduationList?
+  gym              Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  instructor       Instructor?        @relation(fields: [instructorId], references: [id])
+  location         Location?          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+/// Saved graduation list (candidates + checks + next ranks) associated with a graduation class.
+model GraduationList {
+  id        String   @id @default(cuid())
+  classId   String   @unique
+  gymId     String
+  snapshot  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  gym       Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
 }
 
 /// Instructor profile, optionally linked to a Member.

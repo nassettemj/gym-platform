@@ -5,6 +5,8 @@ import Link from "next/link";
 import { createClass } from "../page";
 import { InstructorGuestSelector } from "@/components/InstructorGuestSelector";
 
+const INSTRUCTOR_AND_ABOVE = ["INSTRUCTOR", "STAFF", "LOCATION_ADMIN", "GYM_ADMIN", "PLATFORM_ADMIN"] as const;
+
 interface NewSchedulePageProps {
   params: Promise<{
     gymSlug: string;
@@ -39,7 +41,43 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
     name: loc.name,
   }));
 
-  const instructorsForSelect = gym.instructors.map((inst) => ({
+  // Ensure every user with INSTRUCTOR role or above (with a linked member) has an Instructor record for this gym
+  const usersInstructorAndAbove = await prisma.user.findMany({
+    where: {
+      gymId: gym.id,
+      role: { in: [...INSTRUCTOR_AND_ABOVE] },
+      memberId: { not: null },
+    },
+    include: { member: true },
+  });
+  for (const u of usersInstructorAndAbove) {
+    if (!u.memberId || !u.member) continue;
+    const existing = await prisma.instructor.findUnique({
+      where: { memberId: u.memberId },
+    });
+    if (existing) {
+      if (existing.gymId !== gym.id) continue;
+    } else {
+      const name =
+        [u.member.firstName, u.member.lastName].filter(Boolean).join(" ").trim() ||
+        u.name ||
+        u.email ||
+        "Instructor";
+      await prisma.instructor.create({
+        data: {
+          gymId: gym.id,
+          memberId: u.memberId,
+          name,
+        },
+      });
+    }
+  }
+
+  const allInstructors = await prisma.instructor.findMany({
+    where: { gymId: gym.id },
+    orderBy: { name: "asc" },
+  });
+  const instructorsForSelect = allInstructors.map((inst) => ({
     id: inst.id,
     name: inst.name,
   }));
@@ -120,18 +158,15 @@ export default async function NewSchedulePage({ params }: NewSchedulePageProps) 
 
           <div className="flex flex-col gap-1">
             <label htmlFor="subCategory" className="text-xs font-medium">
-              Sub category
+              Sub category (optional for Graduation)
             </label>
             <select
               id="subCategory"
               name="subCategory"
               className="px-3 py-2 rounded-md bg-black/60 border border-white/15 focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
               defaultValue=""
-              required
             >
-              <option value="" disabled>
-                Select
-              </option>
+              <option value="">—</option>
               <option value="STAND_UP">Stand-up</option>
               <option value="FUNDAMENTALS">Fundamentals</option>
               <option value="INTERMEDIATE">Intermediate</option>

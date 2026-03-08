@@ -10,6 +10,8 @@ interface AdminBreadcrumbsProps {
 
 function humanizeSegment(seg: string): string {
   if (seg === "memberships") return "Plans";
+  if (seg === "graduation-list") return "Graduation";
+  if (seg === "event-list") return "Event list";
   return seg
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -23,9 +25,14 @@ export function AdminBreadcrumbs({ gymSlug }: AdminBreadcrumbsProps) {
   // segments: [gymSlug, "admin", ...rest]
   const rest = segments.slice(2);
 
+  const lastSeg = rest[rest.length - 1];
   const isMemberDetail =
-    rest.length >= 2 && rest[0] === "members" && rest[rest.length - 1];
-  const memberId = isMemberDetail ? rest[rest.length - 1] : null;
+    rest.length >= 2 &&
+    rest[0] === "members" &&
+    lastSeg &&
+    lastSeg !== "graduation-list" &&
+    lastSeg !== "event-list";
+  const memberId = isMemberDetail ? lastSeg : null;
 
   const [memberName, setMemberName] = useState<string | null>(null);
 

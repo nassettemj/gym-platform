@@ -43,7 +43,7 @@ export function ReportingForm({
     e.preventDefault();
     const params = new URLSearchParams();
     if (startDate) params.set("start", startDate);
-    router.push(`/${gymSlug}/admin/reporting?${params.toString()}`);
+    router.push(`/${gymSlug}/admin/members?${params.toString()}`);
   }
 
   function handleLastGrad() {

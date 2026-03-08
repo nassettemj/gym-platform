@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { InstructorGuestSelector } from "./InstructorGuestSelector";
 
@@ -119,7 +119,26 @@ export function ScheduleView({
   const [selectedSubCategory, setSelectedSubCategory] =
     useState<string>("all");
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [hasGraduationList, setHasGraduationList] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!selectedClass || selectedClass.mainCategory !== "GRADUATION") {
+      setHasGraduationList(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/classes/${encodeURIComponent(selectedClass.id)}/graduation-list`)
+      .then((res) => {
+        if (!cancelled) setHasGraduationList(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setHasGraduationList(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClass?.id, selectedClass?.mainCategory]);
 
   // Multi-selection state for bulk actions
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(
@@ -1105,11 +1124,21 @@ export function ScheduleView({
                   Sub category:{" "}
                 </span>
                 <span>
-                  {selectedClass.subCategory
+                  {selectedClass.subCategory != null && selectedClass.subCategory !== ""
                     ? selectedClass.subCategory.replace("_", " ")
-                    : "-"}
+                    : "—"}
                 </span>
               </div>
+              {hasGraduationList && (
+                <div className="pt-2 border-t border-white/10">
+                  <Link
+                    href={`/${gymSlug}/admin/members/graduation-list?classId=${selectedClass.id}`}
+                    className="text-xs text-orange-400 hover:text-orange-300 underline"
+                  >
+                    View graduation list
+                  </Link>
+                </div>
+              )}
             </div>
             </div>
           )}
@@ -1282,15 +1311,14 @@ export function ScheduleView({
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="font-semibold text-white/80 text-[11px]">
-                    Sub category
+                    Sub category (optional for Graduation)
                   </label>
                   <select
                     name="subCategory"
                     defaultValue={selectedClass.subCategory ?? ""}
                     className="px-2 py-1 rounded-md bg-black/40 border border-white/20 text-xs"
-                    required
                   >
-                    <option value="">Select</option>
+                    <option value="">—</option>
                     <option value="STAND_UP">Stand-up</option>
                     <option value="FUNDAMENTALS">Fundamentals</option>
                     <option value="INTERMEDIATE">Intermediate</option>

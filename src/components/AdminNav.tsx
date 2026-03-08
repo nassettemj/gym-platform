@@ -87,15 +87,6 @@ export function AdminNav({
               Planning
             </Link>
           )}
-          {roleAtLeast(role as any, "INSTRUCTOR") && (
-            <Link
-              href={`/${gymSlug}/admin/reporting`}
-              className="block px-3 py-2 hover:bg-white/10"
-              onClick={() => setOpen(false)}
-            >
-              Reporting
-            </Link>
-          )}
           <Link
             href={`/${gymSlug}/admin/my-schedule`}
             className="block px-3 py-2 hover:bg-white/10"
