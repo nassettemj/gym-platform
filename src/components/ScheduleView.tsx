@@ -568,7 +568,10 @@ export function ScheduleView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs">
+        <div
+          className="flex items-center gap-2 text-xs"
+          data-tour="schedule-view-toggle"
+        >
           <button
             type="button"
             onClick={() => setViewMode("day")}
@@ -642,7 +645,10 @@ export function ScheduleView({
           </button>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div
+          className="flex items-center gap-3 text-xs"
+          data-tour="schedule-filters"
+        >
         <select
           value={selectedLocationId}
           onChange={(e) => setSelectedLocationId(e.target.value)}
@@ -701,6 +707,7 @@ export function ScheduleView({
 
       </div>
 
+      <div data-tour="schedule-grid" className="min-h-[120px]">
       {viewMode === "day" && (
         <div className="space-y-2">
           {groupedByDate.length === 0 ? (
@@ -1039,6 +1046,7 @@ export function ScheduleView({
           </div>
         </div>
       )}
+      </div>
 
       {selectedClass && !hasSelection && (
         <div className="fixed bottom-4 right-4 z-50 w-full max-w-md border border-white/20 rounded-lg p-4 bg-black/80 backdrop-blur space-y-3">

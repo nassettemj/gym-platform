@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import type { ClassAge } from "@prisma/client";
-import { auth } from "@/auth";
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { ScheduleView } from "@/components/ScheduleView";
+import {
+  ScheduleOnboarding,
+  ScheduleTourRestart,
+} from "@/components/ScheduleOnboarding";
 import type { BulkClassUpdatePayload } from "@/lib/scheduleBulkTypes";
+import { getGymAndUser, requireGymAccess } from "@/lib/gymAuth";
 
 const INSTRUCTOR_AND_ABOVE = ["INSTRUCTOR", "STAFF", "LOCATION_ADMIN", "GYM_ADMIN", "PLATFORM_ADMIN"] as const;
 
@@ -28,11 +33,6 @@ export async function createClass(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
-
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
-
   const gymId = String(formData.get("gymId") ?? "");
   const locationIdRaw = String(formData.get("locationId") ?? "").trim();
   const locationId = locationIdRaw || null;
@@ -63,6 +63,10 @@ export async function createClass(formData: FormData) {
     viewModeRaw === "day" || viewModeRaw === "week" || viewModeRaw === "month"
       ? viewModeRaw
       : "week";
+
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  if (ctx.gym.id !== gymId) return;
 
   const gym = await prisma.gym.findUnique({
     where: { id: gymId },
@@ -234,10 +238,9 @@ async function updateClass(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const classId = String(formData.get("classId") ?? "");
   const locationIdRaw = String(formData.get("locationId") ?? "").trim();
   const locationId = locationIdRaw || null;
@@ -322,10 +325,9 @@ async function deleteClass(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const classId = String(formData.get("classId") ?? "");
   const viewModeRaw = String(formData.get("viewMode") ?? "week");
   const viewMode =
@@ -346,24 +348,15 @@ export async function bulkUpdateClasses(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const rawPayload = formData.get("bulkPayload");
-  if (!rawPayload) {
-    redirect(`/${gymSlug}/admin/schedule`);
-  }
+  if (!rawPayload) redirect(`/${gymSlug}/admin/schedule`);
 
   const payload = JSON.parse(String(rawPayload)) as BulkClassUpdatePayload;
-  if (!payload.classIds || payload.classIds.length === 0) {
-    redirect(`/${gymSlug}/admin/schedule`);
-  }
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-  });
-  if (!gym) redirect(`/${gymSlug}/admin/schedule`);
+  if (!payload.classIds || payload.classIds.length === 0) redirect(`/${gymSlug}/admin/schedule`);
+  const gym = { id: ctx.gym.id };
 
   await prisma.$transaction(async (tx) => {
     if (payload.operation === "delete") {
@@ -418,13 +411,14 @@ export async function bulkCreateOnDates(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
   const datesJson = String(formData.get("datesJson") ?? "[]");
   const name = String(formData.get("name") ?? "").trim();
   const gymId = String(formData.get("gymId") ?? "");
+  if (gymId !== ctx.gym.id) redirect(`/${gymSlug}/admin/schedule`);
+
   const locationIdRaw = String(formData.get("locationId") ?? "").trim();
   const locationId = locationIdRaw || null;
   const instructorIdRaw = String(formData.get("instructorId") ?? "").trim();
@@ -451,12 +445,12 @@ export async function bulkCreateOnDates(formData: FormData) {
     dateKeys = [];
   }
 
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
+  const gymWithLocations = await prisma.gym.findUnique({
+    where: { id: ctx.gym.id },
     include: { locations: true },
   });
-  if (!gym) redirect(`/${gymSlug}/admin/schedule`);
-  const hasLocations = gym.locations.length > 0;
+  if (!gymWithLocations) redirect(`/${gymSlug}/admin/schedule`);
+  const hasLocations = gymWithLocations.locations.length > 0;
   if (hasLocations && !locationId) redirect(`/${gymSlug}/admin/schedule`);
 
   const isGraduationBulk = mainCategory === "GRADUATION";
@@ -515,29 +509,15 @@ export default async function SchedulePage({
 }: SchedulePageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
-
+  const { gym: gymAccess } = await requireGymAccess(gymSlug);
   const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
+    where: { id: gymAccess.id },
     include: {
-      locations: {
-        orderBy: { name: "asc" },
-      },
-      instructors: {
-        orderBy: { name: "asc" },
-      },
+      locations: { orderBy: { name: "asc" } },
+      instructors: { orderBy: { name: "asc" } },
     },
   });
-
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  if (!gym) notFound();
 
   const search = searchParams ? await searchParams : undefined;
 
@@ -638,6 +618,20 @@ export default async function SchedulePage({
 
   return (
     <div className="space-y-4">
+      <ScheduleOnboarding gymSlug={gymSlug} />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-xl font-semibold">Planning</h1>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/${gymSlug}/admin/schedule/new`}
+            className="text-sm text-orange-400 hover:text-orange-300 underline"
+            data-tour="schedule-new-class"
+          >
+            New class
+          </Link>
+          <ScheduleTourRestart />
+        </div>
+      </div>
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <ScheduleView
           gymId={gym.id}

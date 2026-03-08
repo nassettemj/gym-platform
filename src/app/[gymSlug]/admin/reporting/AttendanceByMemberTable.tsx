@@ -76,49 +76,15 @@ export type ColumnId =
   | "longestStreakDaysOff"
   | "classes";
 
-const BELT_ORDER = ["WHITE", "BLUE", "PURPLE", "BROWN", "BLACK"] as const;
-const BELT_LABELS_FOR_NEXT: Record<string, string> = {
-  WHITE: "White",
-  BLUE: "Blue",
-  PURPLE: "Purple",
-  BROWN: "Brown",
-  BLACK: "Black",
-};
+import {
+  getNextRankLabel,
+  getNextRankForEventList,
+  BELT_ORDER_FOR_SORT,
+  BELT_LABELS_FOR_NEXT,
+} from "@/lib/beltRanks";
+import { buildEventListDisplayRows } from "@/lib/graduationListOrder";
 
-function getNextRankLabel(belt: string | null | undefined): string {
-  if (belt == null || belt === "") return "White";
-  const i = BELT_ORDER.indexOf(belt as typeof BELT_ORDER[number]);
-  if (i < 0) return "—";
-  if (i === BELT_ORDER.length - 1) return "—";
-  return BELT_LABELS_FOR_NEXT[BELT_ORDER[i + 1]] ?? "—";
-}
-
-/** For event list: 1 check → +1 stripe (max 4) or next belt if at 4 stripes. Returns belt/stripes for icon and step type for ordering. */
-export function getNextRankForEventList(
-  belt: string | null | undefined,
-  stripes: number | null | undefined
-): { belt: string; stripes: number; stepType: "stripe" | "belt" } | null {
-  const b = belt == null || belt === "" ? "WHITE" : belt;
-  const s = stripes ?? 0;
-  const idx = BELT_ORDER.indexOf(b as (typeof BELT_ORDER)[number]);
-  if (idx < 0) return null;
-  if (idx === BELT_ORDER.length - 1 && s >= 4) return null; // Black, 4 stripes: no next
-  if (s < 4) {
-    return { belt: b, stripes: s + 1, stepType: "stripe" };
-  }
-  // 4 stripes → next belt
-  if (idx >= BELT_ORDER.length - 1) return null;
-  const nextBelt = BELT_ORDER[idx + 1];
-  return { belt: nextBelt, stripes: 0, stepType: "belt" };
-}
-
-export const BELT_ORDER_FOR_SORT = BELT_ORDER;
-
-function beltSortIndex(belt: string | null | undefined): number {
-  if (belt == null || belt === "") return 0;
-  const i = BELT_ORDER.indexOf(belt as (typeof BELT_ORDER)[number]);
-  return i < 0 ? 999 : i;
-}
+export { getNextRankForEventList, BELT_ORDER_FOR_SORT };
 
 export const ALL_COLUMNS: { id: ColumnId; label: string }[] = [
   { id: "member", label: "Member" },
@@ -582,46 +548,15 @@ export function AttendanceByMemberTable({
         nextRank: { belt: string; stripes: number } | null;
       };
 
-  const eventListDisplayRows = useMemo((): EventListDisplayItem[] => {
-    const withChecks = filtered.filter((row) => (memberCheckCounts[row.member.id] ?? 0) >= 1);
-    const rowsWithMeta: { row: (typeof filtered)[number]; checkCount: number; nextRank: { belt: string; stripes: number } | null; stepType: "stripe" | "belt" | null }[] = [];
-    for (const row of withChecks) {
-      const checkCount = memberCheckCounts[row.member.id] ?? 0;
-      if (checkCount >= 2) {
-        rowsWithMeta.push({ row, checkCount, nextRank: null, stepType: null });
-        continue;
-      }
-      const next = getNextRankForEventList(row.belt, row.stripes);
-      if (next) {
-        rowsWithMeta.push({ row, checkCount, nextRank: { belt: next.belt, stripes: next.stripes }, stepType: next.stepType });
-      } else {
-        rowsWithMeta.push({ row, checkCount, nextRank: null, stepType: null });
-      }
-    }
-    const groupTwoPlus = rowsWithMeta.filter((e) => e.checkCount >= 2);
-    const groupStripe = rowsWithMeta
-      .filter((e) => e.checkCount === 1 && e.stepType === "stripe")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        if (ai !== bi) return ai - bi;
-        return (a.row.stripes ?? 0) - (b.row.stripes ?? 0);
-      });
-    const groupBelt = rowsWithMeta
-      .filter((e) => e.checkCount === 1 && e.stepType === "belt")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        return ai - bi;
-      });
-    const out: EventListDisplayItem[] = [];
-    for (const e of groupTwoPlus) out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    if (groupTwoPlus.length > 0) out.push({ type: "spacer" });
-    for (const e of groupStripe) out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    if (groupStripe.length > 0 && groupBelt.length > 0) out.push({ type: "spacer" });
-    for (const e of groupBelt) out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    return out;
-  }, [filtered, memberCheckCounts]);
+  const eventListDisplayRows = useMemo(
+    () =>
+      buildEventListDisplayRows(
+        filtered,
+        memberCheckCounts,
+        nextRankOverrides ?? undefined,
+      ) as EventListDisplayItem[],
+    [filtered, memberCheckCounts, nextRankOverrides],
+  );
 
   const displayColumns = useMemo(() => {
     if (!eventListMode) return orderedColumns;
@@ -1043,7 +978,7 @@ export function AttendanceByMemberTable({
                                       }}
                                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
                                     >
-                                      {BELT_ORDER.map((b) => (
+                                      {BELT_ORDER_FOR_SORT.map((b) => (
                                         <option key={b} value={b}>
                                           {BELT_LABELS_FOR_NEXT[b]}
                                         </option>

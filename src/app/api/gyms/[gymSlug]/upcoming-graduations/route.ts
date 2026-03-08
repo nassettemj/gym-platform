@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { getGymAndUserForApi } from "@/lib/gymAuth";
 
 export type UpcomingGraduationItem = {
   id: string;
@@ -14,26 +14,10 @@ export async function GET(
   context: { params: Promise<{ gymSlug: string }> },
 ) {
   const { gymSlug } = await context.params;
-  const session = await auth();
-  const user = session?.user as { role?: string; gymId?: string } | undefined;
+  const authResult = await getGymAndUserForApi(gymSlug);
+  if ("error" in authResult) return authResult.response;
 
-  if (!user) {
-    return new NextResponse("Unauthorized", { status: 401 });
-  }
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: { id: true },
-  });
-
-  if (!gym) {
-    return new NextResponse("Not found", { status: 404 });
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    return new NextResponse("Forbidden", { status: 403 });
-  }
-
+  const { gym } = authResult;
   const now = new Date();
   const classes = await prisma.class.findMany({
     where: {

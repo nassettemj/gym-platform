@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import type { AuthUser } from "@/types/auth";
 
 export async function GET(
   _req: Request,
@@ -8,9 +9,9 @@ export async function GET(
 ) {
   const { classId } = await context.params;
   const session = await auth();
-  const user = session?.user as { role?: string; gymId?: string } | undefined;
+  const user = session?.user as AuthUser | undefined;
 
-  if (!user) {
+  if (!user?.id) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

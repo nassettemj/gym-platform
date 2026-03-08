@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { MemberPlanChooser } from "@/components/MemberPlanChooser";
+import { getGymAndUser, requireGymAccess } from "@/lib/gymAuth";
 
 interface ChangePlanPageProps {
   params: Promise<{
@@ -13,31 +13,17 @@ interface ChangePlanPageProps {
 async function pickPlanForMemberFromChangePage(formData: FormData) {
   "use server";
 
-  const session = await auth();
-  const user = session?.user as any;
   const gymSlug = String(formData.get("gymSlug") ?? "");
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
-
   const memberId = String(formData.get("memberId") ?? "");
   const planId = String(formData.get("planId") ?? "");
 
   if (!gymSlug || !memberId || !planId) return;
 
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: { id: true },
-  });
-
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const plan = await prisma.membershipPlan.findFirst({
-    where: { id: planId, gymId: gym.id },
+    where: { id: planId, gymId: ctx.gym.id },
     select: {
       id: true,
       durationDays: true,
@@ -82,25 +68,7 @@ async function pickPlanForMemberFromChangePage(formData: FormData) {
 export default async function ChangePlanPage({ params }: ChangePlanPageProps) {
   const { gymSlug, memberId } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: {
-      id: true,
-      name: true,
-    },
-  });
-
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  const { gym } = await requireGymAccess(gymSlug);
 
   const member = await prisma.member.findFirst({
     where: {

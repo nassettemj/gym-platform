@@ -1,6 +1,49 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
+import { requireGymAccess } from "@/lib/gymAuth";
+import { PageTour, PageTourRestart, type PageTourStep } from "@/components/PageTour";
+
+const LOCATIONS_TOUR_STEPS: PageTourStep[] = [
+  {
+    element: "body",
+    popover: {
+      title: "Locations",
+      description:
+        "Manage your gym locations here. Add addresses so members and classes can be assigned to a specific place.",
+      side: "top",
+      align: "center",
+    },
+  },
+  {
+    element: '[data-tour="locations-add-form"]',
+    popover: {
+      title: "Add location",
+      description:
+        "Enter name and address, then click Add location. New locations appear in the list below and can be used when creating classes or plans.",
+      side: "bottom",
+      align: "start",
+    },
+  },
+  {
+    element: '[data-tour="locations-list"]',
+    popover: {
+      title: "Existing locations",
+      description: "All your locations are listed here. You can add as many as you need (e.g. main dojo, kids room).",
+      side: "top",
+      align: "start",
+    },
+  },
+  {
+    element: "body",
+    popover: {
+      title: "Done",
+      description: "You can replay this tour anytime using the link above.",
+      side: "top",
+      align: "center",
+    },
+  },
+];
 
 interface LocationsPageProps {
   params: Promise<{
@@ -44,34 +87,30 @@ async function createLocation(formData: FormData) {
 export default async function LocationsPage({ params }: LocationsPageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
+  const { gym } = await requireGymAccess(gymSlug);
 
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    include: {
-      locations: true,
-    },
+  const gymWithLocations = await prisma.gym.findUnique({
+    where: { id: gym.id },
+    include: { locations: true },
   });
 
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  if (!gymWithLocations) notFound();
+  const gymId = gymWithLocations.id;
 
   return (
     <div className="space-y-4">
+      <PageTour pageKey="locations" steps={LOCATIONS_TOUR_STEPS} />
+      <div className="flex items-center justify-end">
+        <PageTourRestart pageKey="locations" />
+      </div>
       <section className="border border-white/10 rounded-xl p-4 space-y-4">
         <h2 className="text-sm font-medium text-white/80">Add location</h2>
         <form
           action={createLocation}
           className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end"
+          data-tour="locations-add-form"
         >
-          <input type="hidden" name="gymId" value={gym.id} />
+          <input type="hidden" name="gymId" value={gymId} />
           <input type="hidden" name="gymSlug" value={gymSlug} />
 
           <div className="flex flex-col gap-1">
@@ -143,15 +182,15 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
           </button>
         </form>
 
-        <div className="pt-2 border-t border-white/10">
+        <div className="pt-2 border-t border-white/10" data-tour="locations-list">
           <h3 className="text-xs font-medium text-white/70 mb-2">
             Existing locations
           </h3>
-          {gym.locations.length === 0 ? (
+          {gymWithLocations.locations.length === 0 ? (
             <p className="text-sm text-white/60">No locations yet.</p>
           ) : (
             <ul className="space-y-1 text-sm">
-              {gym.locations.map((loc) => (
+              {gymWithLocations.locations.map((loc) => (
                 <li
                   key={loc.id}
                   className="flex flex-col md:flex-row md:items-center md:justify-between"

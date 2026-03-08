@@ -1,8 +1,52 @@
 import { prisma } from "@/lib/prisma";
 import type { PlanDuration, PlanAge, PlanVisits } from "@prisma/client";
-import { auth } from "@/auth";
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { MembershipPlansList } from "@/components/MembershipPlansList";
+import { getGymAndUser, requireGymAccess } from "@/lib/gymAuth";
+import { roleAtLeast } from "@/lib/roles";
+import { PageTour, PageTourRestart, type PageTourStep } from "@/components/PageTour";
+
+const PLANS_TOUR_STEPS: PageTourStep[] = [
+  {
+    element: "body",
+    popover: {
+      title: "Plans",
+      description:
+        "Here you manage membership plans: subscriptions (monthly or yearly) and passes (e.g. 10 visits). Members are assigned a plan from their profile.",
+      side: "top",
+      align: "center",
+    },
+  },
+  {
+    element: '[data-tour="plans-new"]',
+    popover: {
+      title: "New plan",
+      description: "Click here to create a new membership plan. You'll set name, price, billing type (subscription or pass), and age group.",
+      side: "left",
+      align: "center",
+    },
+  },
+  {
+    element: '[data-tour="plans-list"]',
+    popover: {
+      title: "Plans list",
+      description:
+        "Each card is a plan. Edit name, price, or billing type inline. Plans can be for adults or kids & juniors.",
+      side: "top",
+      align: "start",
+    },
+  },
+  {
+    element: "body",
+    popover: {
+      title: "Done",
+      description: "You can replay this tour anytime using the link above.",
+      side: "top",
+      align: "center",
+    },
+  },
+];
 
 interface MembershipsPageProps {
   params: Promise<{
@@ -26,12 +70,11 @@ async function createPlan(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
-
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const gymId = String(formData.get("gymId") ?? "");
+  if (gymId !== ctx.gym.id) return;
   const name = String(formData.get("name") ?? "").trim();
   const priceStr = String(formData.get("price") ?? "").trim();
   const billingKind = String(formData.get("billingKind") ?? "").trim();
@@ -79,10 +122,8 @@ async function updatePlan(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
-
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const planId = String(formData.get("planId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -125,10 +166,8 @@ async function deletePlan(formData: FormData) {
   "use server";
 
   const gymSlug = String(formData.get("gymSlug") ?? "");
-
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
+  const ctx = await getGymAndUser(gymSlug);
+  if (!ctx) redirect(gymSlug ? `/${gymSlug}/login` : "/login");
 
   const planId = String(formData.get("planId") ?? "");
   const confirm = String(formData.get("confirm") ?? "").trim();
@@ -146,40 +185,36 @@ async function deletePlan(formData: FormData) {
 export default async function MembershipsPage({ params }: MembershipsPageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
-
-  let gym;
-  try {
-    gym = await prisma.gym.findUnique({
-      where: { slug: gymSlug },
-      include: {
-        membershipPlans: {
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-  } catch (err) {
-    throw err;
+  const { gym: gymAccess, user } = await requireGymAccess(gymSlug);
+  if (!roleAtLeast(user.role as Parameters<typeof roleAtLeast>[0], "LOCATION_ADMIN")) {
+    redirect(`/${gymSlug}/login`);
   }
 
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN") {
-    if (user.gymId !== gym.id) {
-      redirect(`/${gymSlug}/login`);
-    }
-    if (user.role !== "GYM_ADMIN" && user.role !== "LOCATION_ADMIN") {
-      redirect(`/${gymSlug}/login`);
-    }
-  }
+  const gym = await prisma.gym.findUnique({
+    where: { id: gymAccess.id },
+    include: {
+      membershipPlans: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!gym) notFound();
 
   return (
     <div className="space-y-4">
-      <section className="border border-white/10 rounded-xl p-4 space-y-4">
+      <PageTour pageKey="plans" steps={PLANS_TOUR_STEPS} />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Link
+          href={`/${gymSlug}/admin/plans/new`}
+          className="text-sm text-orange-400 hover:text-orange-300 underline"
+          data-tour="plans-new"
+        >
+          New plan
+        </Link>
+        <PageTourRestart pageKey="plans" />
+      </div>
+      <section
+        className="border border-white/10 rounded-xl p-4 space-y-4"
+        data-tour="plans-list"
+      >
         <MembershipPlansList
           gymSlug={gymSlug}
           gymId={gym.id}

@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClass } from "../page";
 import { InstructorGuestSelector } from "@/components/InstructorGuestSelector";
+import { requireGymAccess } from "@/lib/gymAuth";
 
 const INSTRUCTOR_AND_ABOVE = ["INSTRUCTOR", "STAFF", "LOCATION_ADMIN", "GYM_ADMIN", "PLATFORM_ADMIN"] as const;
 
@@ -16,25 +16,16 @@ interface NewSchedulePageProps {
 export default async function NewSchedulePage({ params }: NewSchedulePageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
-
+  const { gym: gymAccess } = await requireGymAccess(gymSlug);
   const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
+    where: { id: gymAccess.id },
     include: {
       locations: { orderBy: { name: "asc" } },
       instructors: { orderBy: { name: "asc" } },
     },
   });
 
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  if (!gym) notFound();
 
   const locationsForSelect = gym.locations.map((loc) => ({
     id: loc.id,

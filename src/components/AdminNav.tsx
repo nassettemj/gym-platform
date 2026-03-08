@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { roleAtLeast } from "@/lib/roles";
+import { restartOnboardingTour } from "@/components/AdminOnboarding";
 
 export function AdminNav({
   gymSlug,
@@ -32,6 +33,7 @@ export function AdminNav({
         onClick={() => setOpen((prev) => !prev)}
         className="inline-flex h-9 w-9 flex-col items-center justify-center gap-1.5 rounded-md border border-white/20 bg-black/40 hover:bg-black/60"
         aria-label="Open admin menu"
+        data-tour="admin-menu"
       >
         <span className="block h-0.5 w-4 rounded-full bg-white" />
         <span className="block h-0.5 w-4 rounded-full bg-white" />
@@ -94,6 +96,16 @@ export function AdminNav({
           >
             Schedule
           </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              restartOnboardingTour();
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
+          >
+            Restart tour
+          </button>
         </div>
       )}
     </div>

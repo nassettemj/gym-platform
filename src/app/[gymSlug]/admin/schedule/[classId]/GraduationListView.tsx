@@ -3,11 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BeltRankIcon } from "../../reporting/BeltRankIcon";
-import {
-  getNextRankForEventList,
-  BELT_ORDER_FOR_SORT,
-  type MemberSummary,
-} from "../../reporting/AttendanceByMemberTable";
+import { type MemberSummary } from "../../reporting/AttendanceByMemberTable";
+import { buildEventListDisplayRows } from "@/lib/graduationListOrder";
 import type { CloseGraduationUpdate } from "./actions";
 
 type SnapshotRow = MemberSummary & {
@@ -27,12 +24,6 @@ type DisplayItem =
   | { type: "spacer" }
   | { type: "row"; row: SnapshotRow; checkCount: number; nextRank: { belt: string; stripes: number } | null };
 
-function beltSortIndex(belt: string | null | undefined): number {
-  if (belt == null || belt === "") return 0;
-  const i = BELT_ORDER_FOR_SORT.indexOf(belt as (typeof BELT_ORDER_FOR_SORT)[number]);
-  return i < 0 ? 999 : i;
-}
-
 type Props = {
   snapshot: SavedSnapshot;
   gymSlug: string;
@@ -49,60 +40,16 @@ export function GraduationListView({ snapshot, gymSlug, classId, closeGraduation
 
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set(selectedMemberIds));
 
-  const displayItems: DisplayItem[] = useMemo(() => {
-    const withChecks = rows.filter((row) => (memberCheckCounts[row.member.id] ?? 0) >= 1);
-    const rowsWithMeta: {
-      row: SnapshotRow;
-      checkCount: number;
-      nextRank: { belt: string; stripes: number } | null;
-      stepType: "stripe" | "belt" | null;
-    }[] = [];
-    for (const row of withChecks) {
-      const checkCount = memberCheckCounts[row.member.id] ?? 0;
-      if (checkCount >= 2) {
-        const override = nextRankOverrides[row.member.id] ?? null;
-        rowsWithMeta.push({ row, checkCount, nextRank: override, stepType: null });
-        continue;
-      }
-      const next = getNextRankForEventList(row.belt, row.stripes);
-      if (next) {
-        rowsWithMeta.push({
-          row,
-          checkCount,
-          nextRank: { belt: next.belt, stripes: next.stripes },
-          stepType: next.stepType,
-        });
-      } else {
-        rowsWithMeta.push({ row, checkCount, nextRank: null, stepType: null });
-      }
-    }
-    const groupTwoPlus = rowsWithMeta.filter((e) => e.checkCount >= 2);
-    const groupStripe = rowsWithMeta
-      .filter((e) => e.checkCount === 1 && e.stepType === "stripe")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        if (ai !== bi) return ai - bi;
-        return (a.row.stripes ?? 0) - (b.row.stripes ?? 0);
-      });
-    const groupBelt = rowsWithMeta
-      .filter((e) => e.checkCount === 1 && e.stepType === "belt")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        return ai - bi;
-      });
-    const out: DisplayItem[] = [];
-    for (const e of groupTwoPlus)
-      out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    if (groupTwoPlus.length > 0) out.push({ type: "spacer" });
-    for (const e of groupStripe)
-      out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    if (groupStripe.length > 0 && groupBelt.length > 0) out.push({ type: "spacer" });
-    for (const e of groupBelt)
-      out.push({ type: "row", row: e.row, checkCount: e.checkCount, nextRank: e.nextRank });
-    return out;
-  }, [rows, memberCheckCounts, nextRankOverrides]);
+  const displayItems: DisplayItem[] = useMemo(
+    () =>
+      buildEventListDisplayRows(rows, memberCheckCounts, nextRankOverrides) as DisplayItem[],
+    [rows, memberCheckCounts, nextRankOverrides],
+  );
+
+  const rowCount = useMemo(
+    () => displayItems.filter((x) => x.type === "row").length,
+    [displayItems],
+  );
 
   const toggleCheck = (memberId: string) => {
     setCheckedIds((prev) => {
@@ -149,7 +96,7 @@ export function GraduationListView({ snapshot, gymSlug, classId, closeGraduation
         <h2 className="text-xs font-semibold text-white/80 uppercase tracking-wide">
           Graduation list
         </h2>
-        {displayItems.filter((x) => x.type === "row").length > 0 &&
+        {rowCount > 0 &&
           (eventClosed ? (
             <span className="px-3 py-1.5 text-xs font-medium rounded-md bg-white/10 text-white/80 border border-white/20">
               Event closed
@@ -170,7 +117,7 @@ export function GraduationListView({ snapshot, gymSlug, classId, closeGraduation
           {error}
         </p>
       )}
-      {displayItems.filter((x) => x.type === "row").length === 0 ? (
+      {rowCount === 0 ? (
         <p className="text-sm text-white/60">No members with checks in this list.</p>
       ) : (
         <div className="overflow-x-auto border border-white/10 rounded-lg">

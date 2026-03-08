@@ -1,12 +1,45 @@
-import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canAttendClass } from "@/lib/age";
 import { MemberScheduleView } from "@/components/MemberScheduleView";
+import { requireGymAccess } from "@/lib/gymAuth";
 import {
   createCheckIn,
   deleteCheckIn,
-} from "../members/[memberId]/page";
+} from "../members/[memberId]/actions";
+import { PageTour, PageTourRestart, type PageTourStep } from "@/components/PageTour";
+
+const MY_SCHEDULE_TOUR_STEPS: PageTourStep[] = [
+  {
+    element: "body",
+    popover: {
+      title: "My schedule",
+      description:
+        "Here you see your upcoming classes. Sign up for a class to reserve your spot, and instructors can mark your attendance.",
+      side: "top",
+      align: "center",
+    },
+  },
+  {
+    element: '[data-tour="my-schedule-view"]',
+    popover: {
+      title: "Calendar",
+      description:
+        "Switch between day, week, or month. Click a class to sign up or cancel your sign-up. If you're staff, you can also take attendance from here.",
+      side: "top",
+      align: "start",
+    },
+  },
+  {
+    element: "body",
+    popover: {
+      title: "Done",
+      description: "You can replay this tour anytime using the link above.",
+      side: "top",
+      align: "center",
+    },
+  },
+];
 
 interface MySchedulePageProps {
   params: Promise<{ gymSlug: string }>;
@@ -15,23 +48,10 @@ interface MySchedulePageProps {
 export default async function MySchedulePage({ params }: MySchedulePageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as any;
-  if (!user) redirect(`/${gymSlug}/login`);
+  const { gym, user } = await requireGymAccess(gymSlug);
 
   if (!user.memberId) {
     redirect(`/${gymSlug}/admin`);
-  }
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: { id: true },
-  });
-
-  if (!gym) notFound();
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
   }
 
   const member = await prisma.member.findFirst({
@@ -208,7 +228,14 @@ export default async function MySchedulePage({ params }: MySchedulePageProps) {
 
   return (
     <div className="space-y-4">
-      <section className="border border-white/10 rounded-xl p-4 space-y-4">
+      <PageTour pageKey="my-schedule" steps={MY_SCHEDULE_TOUR_STEPS} />
+      <div className="flex items-center justify-end">
+        <PageTourRestart pageKey="my-schedule" />
+      </div>
+      <section
+        className="border border-white/10 rounded-xl p-4 space-y-4"
+        data-tour="my-schedule-view"
+      >
         {!member.birthDate && (
           <p className="text-xs text-white/60 mb-2">
             Add your birth date to see classes suited to your age.

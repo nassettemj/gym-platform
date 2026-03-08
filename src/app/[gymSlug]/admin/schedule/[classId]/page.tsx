@@ -1,8 +1,8 @@
-import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { roleAtLeast } from "@/lib/roles";
+import { requireGymAccess } from "@/lib/gymAuth";
 import { setCheckInAttended, confirmClassAttendance, closeGraduationEvent } from "./actions";
 import { GraduationListView, type SavedSnapshot } from "./GraduationListView";
 
@@ -13,25 +13,7 @@ interface ClassDetailPageProps {
 export default async function ClassDetailPage({ params }: ClassDetailPageProps) {
   const { gymSlug, classId } = await params;
 
-  const session = await auth();
-  const user = session?.user as {
-    id?: string;
-    gymId?: string;
-    role?: string;
-    memberId?: string;
-  };
-  if (!user) redirect(`/${gymSlug}/login`);
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: { id: true, name: true },
-  });
-
-  if (!gym) notFound();
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
+  const { gym, user } = await requireGymAccess(gymSlug);
 
   const clazz = await prisma.class.findFirst({
     where: { id: classId, gymId: gym.id },

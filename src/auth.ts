@@ -2,6 +2,9 @@ import NextAuth, { type NextAuthOptions, getServerSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import type { AuthUser } from "@/types/auth";
+
+export type { AuthUser };
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -177,10 +180,11 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.sub;
-        (session.user as any).role = (token as any).role;
-        (session.user as any).gymId = (token as any).gymId;
-        (session.user as any).memberId = (token as any).memberId;
+        const u = session.user as AuthUser;
+        u.id = token.sub ?? "";
+        u.role = (token as { role?: AuthUser["role"] }).role ?? null;
+        u.gymId = (token as { gymId?: string }).gymId ?? null;
+        u.memberId = (token as { memberId?: string }).memberId ?? null;
       }
       return session;
     },

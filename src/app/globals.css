@@ -12,3 +12,26 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Driver.js onboarding tour: dark theme */
+.gym-onboarding-popover.driver-popover {
+  background: rgb(38 38 38);
+  color: #fff;
+}
+.gym-onboarding-popover .driver-popover-title {
+  color: #fff;
+}
+.gym-onboarding-popover .driver-popover-description {
+  color: rgb(212 212 212);
+}
+.gym-onboarding-popover .driver-popover-prev-btn,
+.gym-onboarding-popover .driver-popover-next-btn {
+  background: var(--accent);
+  color: #fff;
+}
+.gym-onboarding-popover .driver-popover-close-btn {
+  color: rgb(212 212 212);
+}
+.gym-onboarding-popover .driver-popover-progress-text {
+  color: rgb(163 163 163);
+}

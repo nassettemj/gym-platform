@@ -1,24 +1,46 @@
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { roleAtLeast } from "@/lib/roles";
+import { requireGymInstructor } from "@/lib/gymAuth";
+import { startOfDayUTC, endOfDayUTC } from "@/lib/date";
 import { ReportTableSection, MEMBERS_PAGE_COLUMNS } from "../reporting/ReportTableSection";
+import { PageTour, PageTourRestart, type PageTourStep } from "@/components/PageTour";
+
+const MEMBERS_TOUR_STEPS: PageTourStep[] = [
+  {
+    element: "body",
+    popover: {
+      title: "Members",
+      description:
+        "This page lists all members with their attendance and progress. Click a row to open that member's profile.",
+      side: "top",
+      align: "center",
+    },
+  },
+  {
+    element: '[data-tour="members-table"]',
+    popover: {
+      title: "Members table",
+      description:
+        "The table shows classes attended by category, belt, subscription status, and more. Use the menu to show or hide columns. You can filter and sort to find members quickly.",
+      side: "top",
+      align: "start",
+    },
+  },
+  {
+    element: "body",
+    popover: {
+      title: "Done",
+      description: "You can replay this tour anytime using the link above.",
+      side: "top",
+      align: "center",
+    },
+  },
+];
 
 interface MembersPageProps {
   params: Promise<{ gymSlug: string }>;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-}
-
-function startOfDay(d: Date): Date {
-  const out = new Date(d);
-  out.setUTCHours(0, 0, 0, 0);
-  return out;
-}
-
-function endOfDay(d: Date): Date {
-  const out = new Date(d);
-  out.setUTCHours(23, 59, 59, 999);
-  return out;
 }
 
 /** Count how many times there was a gap of 7+ consecutive days with no training (within report range). */
@@ -72,29 +94,7 @@ export default async function MembersPage({
 }: MembersPageProps) {
   const { gymSlug } = await params;
 
-  const session = await auth();
-  const user = session?.user as { role?: string; gymId?: string } | undefined;
-
-  if (!user) {
-    redirect(`/${gymSlug}/login`);
-  }
-
-  const gym = await prisma.gym.findUnique({
-    where: { slug: gymSlug },
-    select: { id: true, name: true },
-  });
-
-  if (!gym) {
-    notFound();
-  }
-
-  if (user.role !== "PLATFORM_ADMIN" && user.gymId !== gym.id) {
-    redirect(`/${gymSlug}/login`);
-  }
-
-  if (!roleAtLeast(user.role as any, "INSTRUCTOR")) {
-    redirect(`/${gymSlug}/login`);
-  }
+  const { gym, user } = await requireGymInstructor(gymSlug);
 
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const startParam = typeof resolvedSearchParams.start === "string" ? resolvedSearchParams.start : null;
@@ -114,15 +114,15 @@ export default async function MembersPage({
     : null;
 
   let reportStart: Date | null = null;
-  const reportEnd = endOfDay(new Date());
+  const reportEnd = endOfDayUTC(new Date());
 
   if (startParam) {
     const parsed = new Date(`${startParam}T00:00:00.000Z`);
     if (!Number.isNaN(parsed.getTime())) {
-      reportStart = startOfDay(parsed);
+      reportStart = startOfDayUTC(parsed);
     }
   } else if (lastGraduationDate) {
-    reportStart = startOfDay(lastGraduationDate);
+    reportStart = startOfDayUTC(lastGraduationDate);
   }
 
   let checkIns: Array<{
@@ -291,8 +291,15 @@ export default async function MembersPage({
 
   return (
     <div className="space-y-6">
+      <PageTour pageKey="members" steps={MEMBERS_TOUR_STEPS} />
+      <div className="flex items-center justify-end">
+        <PageTourRestart pageKey="members" />
+      </div>
       {reportStart && (
-        <section className="border border-white/10 rounded-xl p-4 space-y-3">
+        <section
+          className="border border-white/10 rounded-xl p-4 space-y-3"
+          data-tour="members-table"
+        >
           <ReportTableSection
             gymSlug={gymSlug}
             memberSummaries={memberSummaries}

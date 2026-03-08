@@ -7,10 +7,9 @@ import {
   EVENT_LIST_SNAPSHOT_KEY,
   type EventListSnapshot,
   type MemberSummary,
-  getNextRankForEventList,
-  BELT_ORDER_FOR_SORT,
 } from "../../reporting/AttendanceByMemberTable";
 import { BeltRankIcon } from "../../reporting/BeltRankIcon";
+import { buildEventListGroups } from "@/lib/graduationListOrder";
 
 function parseSnapshot(raw: string | null): EventListSnapshot | null {
   if (raw == null || raw === "") return null;
@@ -26,16 +25,8 @@ function parseSnapshot(raw: string | null): EventListSnapshot | null {
 type EventRow = {
   row: MemberSummary;
   checkCount: number;
-  /** Next rank for icon (1 check only). Null for 2+ checks or no next. */
   nextRank: { belt: string; stripes: number } | null;
-  stepType: "stripe" | "belt" | null;
 };
-
-function beltSortIndex(belt: string | null | undefined): number {
-  if (belt == null || belt === "") return 0; // Unranked → treat as White for sort
-  const i = BELT_ORDER_FOR_SORT.indexOf(belt as (typeof BELT_ORDER_FOR_SORT)[number]);
-  return i < 0 ? 999 : i;
-}
 
 export default function EventListPage() {
   const params = useParams();
@@ -49,46 +40,12 @@ export default function EventListPage() {
 
   const { groupTwoPlus, groupStripe, groupBelt } = useMemo(() => {
     if (snapshot === null || snapshot === "pending") {
-      return { groupTwoPlus: [], groupStripe: [], groupBelt: [] };
+      return { groupTwoPlus: [] as EventRow[], groupStripe: [] as EventRow[], groupBelt: [] as EventRow[] };
     }
-    const { rows, memberCheckCounts } = snapshot;
-    const withChecks: EventRow[] = [];
-    for (const row of rows) {
-      const checkCount = memberCheckCounts[row.member.id] ?? 0;
-      if (checkCount < 1) continue;
-      if (checkCount >= 2) {
-        withChecks.push({ row, checkCount, nextRank: null, stepType: null });
-        continue;
-      }
-      const next = getNextRankForEventList(row.belt, row.stripes);
-      if (next) {
-        withChecks.push({
-          row,
-          checkCount: 1,
-          nextRank: { belt: next.belt, stripes: next.stripes },
-          stepType: next.stepType,
-        });
-      } else {
-        withChecks.push({ row, checkCount: 1, nextRank: null, stepType: null });
-      }
-    }
-    const groupTwoPlus = withChecks.filter((e) => e.checkCount >= 2);
-    const groupStripe = withChecks
-      .filter((e) => e.checkCount === 1 && e.stepType === "stripe")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        if (ai !== bi) return ai - bi;
-        return (a.row.stripes ?? 0) - (b.row.stripes ?? 0);
-      });
-    const groupBelt = withChecks
-      .filter((e) => e.checkCount === 1 && e.stepType === "belt")
-      .sort((a, b) => {
-        const ai = beltSortIndex(a.row.belt);
-        const bi = beltSortIndex(b.row.belt);
-        return ai - bi;
-      });
-    return { groupTwoPlus, groupStripe, groupBelt };
+    return buildEventListGroups(
+      snapshot.rows,
+      snapshot.memberCheckCounts,
+    );
   }, [snapshot]);
 
   if (snapshot === "pending") {
