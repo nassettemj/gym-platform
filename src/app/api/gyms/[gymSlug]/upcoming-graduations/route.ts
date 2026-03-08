@@ -50,12 +50,14 @@ export async function GET(
     },
   });
 
-  const items: UpcomingGraduationItem[] = classes.map((c) => ({
-    id: c.id,
-    name: c.name,
-    startAt: c.startAt.toISOString(),
-    locationName: c.location?.name ?? null,
-  }));
+  const items: UpcomingGraduationItem[] = classes
+    .filter((c): c is typeof c & { startAt: Date } => c.startAt != null)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      startAt: c.startAt.toISOString(),
+      locationName: c.location?.name ?? null,
+    }));
 
   return NextResponse.json({ items });
 }
