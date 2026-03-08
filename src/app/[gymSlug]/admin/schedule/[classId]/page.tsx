@@ -4,7 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { roleAtLeast } from "@/lib/roles";
 import { setCheckInAttended, confirmClassAttendance, closeGraduationEvent } from "./actions";
-import { GraduationListView } from "./GraduationListView";
+import { GraduationListView, type SavedSnapshot } from "./GraduationListView";
 
 interface ClassDetailPageProps {
   params: Promise<{ gymSlug: string; classId: string }>;
@@ -130,7 +130,7 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
           {isGraduation ? (
             graduationSnapshot ? (
               <GraduationListView
-                snapshot={graduationSnapshot}
+                snapshot={graduationSnapshot as SavedSnapshot}
                 gymSlug={gymSlug}
                 classId={clazz.id}
                 closeGraduationEvent={closeGraduationEvent}

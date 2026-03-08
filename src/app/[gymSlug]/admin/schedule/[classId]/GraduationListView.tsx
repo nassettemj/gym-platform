@@ -16,7 +16,7 @@ type SnapshotRow = MemberSummary & {
   stripes?: number | null;
 };
 
-type SavedSnapshot = {
+export type SavedSnapshot = {
   data: SnapshotRow[];
   memberCheckCounts?: Record<string, 0 | 1 | 2>;
   nextRankOverrides?: Record<string, { belt: string; stripes: number }>;
