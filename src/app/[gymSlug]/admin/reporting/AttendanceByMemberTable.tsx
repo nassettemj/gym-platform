@@ -1443,7 +1443,7 @@ function UpcomingGraduationsPanel({
                 type="button"
                 onClick={() => {
                   setSavingId(item.id);
-                  onSelectEvent(item.id).finally(() => setSavingId(null));
+                  Promise.resolve(onSelectEvent(item.id)).finally(() => setSavingId(null));
                 }}
                 disabled={savingId !== null}
                 className="w-full text-left flex flex-wrap items-baseline gap-2 text-sm text-white/90 hover:text-white hover:bg-white/10 rounded px-2 py-1.5 -mx-2 -my-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:opacity-50"
