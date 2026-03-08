@@ -18,6 +18,7 @@ export async function closeGraduationEvent(
   const session = await auth();
   const user = session?.user as { id?: string; gymId?: string; role?: string } | undefined;
   if (!user?.id) return { error: "Not authenticated" };
+  const userId = user.id;
 
   const gym = await prisma.gym.findUnique({
     where: { slug: gymSlug },
@@ -61,7 +62,7 @@ export async function closeGraduationEvent(
         prisma.memberBeltStripeLog.create({
           data: {
             memberId: u.memberId,
-            changedByUserId: user.id,
+            changedByUserId: userId,
             previousBelt: member.belt,
             newBelt: u.belt,
             previousStripes: member.stripes,
